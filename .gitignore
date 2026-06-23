@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+config.json
+capture.curl
+captured_hubs_main_content.graphql
+data/
+*.har

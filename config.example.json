@@ -1,0 +1,23 @@
+{
+  "api_url": "https://order.trypicnic.com/api/picnic",
+  "origin": "https://order.trypicnic.com",
+  "service_slug": "picnic",
+  "hub_order_constraint": {
+    "hubId": "YOUR_HUB_ID",
+    "routeId": "YOUR_ROUTE_ID",
+    "deliveryWindowStart": "2026-06-22T19:00:00Z",
+    "deliveryWindowEnd": "2026-06-22T19:30:00Z"
+  },
+  "filters": {
+    "tags": ["TAG_ALL"],
+    "removeItemModifiers": true
+  },
+  "facility_id": null,
+  "cookies": "PASTE_COOKIE_HEADER_FROM_DEVTOOLS",
+  "headers": {
+    "application-version": "PASTE_FROM_DEVTOOLS",
+    "application-name": "d2c-facility-app",
+    "x-client-session-id": "PASTE_FROM_DEVTOOLS",
+    "consistent-authz": "true"
+  }
+}

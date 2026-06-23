@@ -1,0 +1,1 @@
+"""Picnic menu scraper."""
