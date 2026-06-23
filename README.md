@@ -150,14 +150,26 @@ npm run build
 
 Output is in `web/dist/` — upload that folder to any static host (GitHub Pages, Cloudflare Pages, S3, etc.).
 
+### Deploy to GitHub Pages
+
+Pushes to `main` run [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml), which builds `web/` and deploys `web/dist/` via the official GitHub Pages action. You can also trigger it manually from the Actions tab.
+
+One-time repo setup:
+
+1. Settings → Pages → Build and deployment → Source: **GitHub Actions**
+2. Commit an up-to-date `web/public/menu.json` (run `build_search_index.py` locally after scraping)
+
+The workflow sets `GH_PAGES_BASE` to `/<repo-name>/` so asset paths work on project pages (`https://<user>.github.io/<repo>/`).
+
 ### UI features
 
-- Instant fuzzy search across item name, description, and restaurant
+- Instant fuzzy search prioritizing dish names over descriptions
 - Sort by relevance, price, name, or restaurant
-- Max price filter with $12 / $15 / $20 presets
-- Restaurant multi-select filter
+- Max price filter with $12 / $15 / $20 presets (rounded to nearest dollar)
+- Scrollable restaurant chip filter with select all / clear
 - Dietary chips (GF, vegan, vegetarian, spicy, etc.)
 - Unavailable items hidden by default
+- Light and dark mode via system preference
 - Shareable links via URL query params (`?q=bowl&maxPrice=15`)
 
 Keyboard shortcuts: `/` focuses search, `Esc` clears the query.

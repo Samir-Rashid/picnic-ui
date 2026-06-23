@@ -1,6 +1,6 @@
 import "./style.css";
 import { createSearchIndex, formatPrice, searchItems } from "./search";
-import type { DietaryTag, FilterState, MenuData, SortMode } from "./types";
+import type { DietaryTag, FilterState, MenuData, MenuItem, SortMode } from "./types";
 import { readStateFromUrl, writeStateToUrl } from "./urlState";
 
 const DIETARY_OPTIONS: { tag: DietaryTag; label: string }[] = [
@@ -57,42 +57,6 @@ function statusMessage(state: FilterState, count: number): string {
   return `${count} result${count === 1 ? "" : "s"} ${parts.join(" ")}`;
 }
 
-function renderCard(item: MenuData["items"][number]): string {
-  const photo = item.photoUrl
-    ? `<img class="thumb" src="${escapeAttr(item.photoUrl)}" alt="" loading="lazy" decoding="async" />`
-    : `<div class="thumb placeholder">No photo</div>`;
-
-  const storeLogo = item.storeLogo
-    ? `<img class="store-logo" src="${escapeAttr(item.storeLogo)}" alt="" loading="lazy" />`
-    : "";
-
-  const tags = [
-    ...item.dietaryTags.map(
-      (tag) => `<span class="tag">${escapeHtml(formatDietaryTag(tag))}</span>`,
-    ),
-    ...(item.available ? [] : [`<span class="tag warn">Unavailable</span>`]),
-  ].join("");
-
-  const description = item.description
-    ? `<p class="description">${escapeHtml(item.description)}</p>`
-    : "";
-
-  return `
-    <article class="card${item.available ? "" : " unavailable"}">
-      ${photo}
-      <div>
-        <div class="card-head">
-          <h2>${escapeHtml(item.name)}</h2>
-          <div class="price">${formatPrice(item.price)}</div>
-        </div>
-        <div class="store-line">${storeLogo}<span>${escapeHtml(item.storeName)}</span></div>
-        ${description}
-        ${tags ? `<div class="tags">${tags}</div>` : ""}
-      </div>
-    </article>
-  `;
-}
-
 function formatDietaryTag(tag: DietaryTag): string {
   return DIETARY_OPTIONS.find((option) => option.tag === tag)?.label ?? tag;
 }
@@ -109,6 +73,209 @@ function escapeAttr(value: string): string {
   return escapeHtml(value);
 }
 
+function renderItemRow(item: MenuItem): string {
+  const photo = item.photoUrl
+    ? `<img class="thumb" src="${escapeAttr(item.photoUrl)}" alt="" loading="lazy" decoding="async" />`
+    : `<div class="thumb placeholder">No photo</div>`;
+
+  const storeLogo = item.storeLogo
+    ? `<img class="store-logo" src="${escapeAttr(item.storeLogo)}" alt="" loading="lazy" />`
+    : "";
+
+  const tags = [
+    ...item.dietaryTags.map(
+      (tag) => `<span class="tag">${escapeHtml(formatDietaryTag(tag))}</span>`,
+    ),
+    ...(item.available ? [] : [`<span class="tag warn">Unavailable</span>`]),
+  ].join("");
+
+  const description = item.description
+    ? `<p class="item-description">${escapeHtml(item.description)}</p>`
+    : "";
+
+  return `
+    <article class="item-row${item.available ? "" : " unavailable"}">
+      ${photo}
+      <div class="item-body">
+        <h2 class="item-title">${escapeHtml(item.name)}</h2>
+        <div class="item-meta">${storeLogo}<span>${escapeHtml(item.storeName)}</span></div>
+        ${description}
+        ${tags ? `<div class="item-tags">${tags}</div>` : ""}
+      </div>
+      <div class="item-price">${formatPrice(item.price)}</div>
+    </article>
+  `;
+}
+
+interface UiRefs {
+  searchInput: HTMLInputElement;
+  sortSelect: HTMLSelectElement;
+  maxPriceInput: HTMLInputElement;
+  showUnavailableInput: HTMLInputElement;
+  statusText: HTMLSpanElement;
+  clearButton: HTMLButtonElement;
+  resultsEl: HTMLElement;
+  dietaryChips: Map<DietaryTag, HTMLButtonElement>;
+  pricePresets: Map<number, HTMLButtonElement>;
+  storeChips: Map<string, HTMLButtonElement>;
+}
+
+function mountShell(data: MenuData): UiRefs {
+  const dietaryChips = new Map<DietaryTag, HTMLButtonElement>();
+  const pricePresets = new Map<number, HTMLButtonElement>();
+  const storeChips = new Map<string, HTMLButtonElement>();
+
+  const dietaryHtml = DIETARY_OPTIONS.map(({ tag, label }) => {
+    return `<button type="button" class="chip" data-dietary="${tag}">${label}</button>`;
+  }).join("");
+
+  const presetHtml = PRICE_PRESETS.map(
+    (preset) =>
+      `<button type="button" class="chip" data-preset="${preset}">$${preset}</button>`,
+  ).join("");
+
+  const storeHtml = data.stores
+    .map(
+      (store) =>
+        `<button type="button" class="chip store-chip" data-store="${escapeAttr(store.id)}" title="${escapeAttr(store.name)}">${escapeHtml(store.name)}</button>`,
+    )
+    .join("");
+
+  app.innerHTML = `
+    <section class="toolbar">
+      <div class="toolbar-section">
+        <input
+          id="search"
+          class="search-input"
+          type="search"
+          placeholder="Search dishes, ingredients…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="toolbar-section">
+        <div class="filter-grid">
+          <div class="filter-row">
+            <label class="field">
+              Sort
+              <select id="sort">
+                <option value="relevance">Relevance</option>
+                <option value="price-asc">Price: low to high</option>
+                <option value="price-desc">Price: high to low</option>
+                <option value="name">Name</option>
+                <option value="restaurant">Restaurant</option>
+              </select>
+            </label>
+
+            <label class="field">
+              Max
+              <input id="maxPrice" type="number" min="0" step="1" placeholder="Any" />
+            </label>
+            ${presetHtml}
+          </div>
+
+          <div>
+            <div class="chip-group-label">Dietary</div>
+            <div class="filter-row">${dietaryHtml}</div>
+          </div>
+
+          <div>
+            <div class="chip-group-label">Restaurants (${data.stores.length})</div>
+            <div class="filter-row store-chips">${storeHtml}</div>
+            <div class="store-actions">
+              <button type="button" class="text-btn" id="clearStores">Clear</button>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <label class="checkbox-field">
+              <input id="showUnavailable" type="checkbox" />
+              Show unavailable
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="status-bar">
+      <span id="statusText"></span>
+      <button type="button" class="text-btn" id="clearFilters" hidden>Clear filters</button>
+    </div>
+
+    <section class="results" id="results"></section>
+
+    <footer class="page-footer">
+      Menu snapshot · ${escapeHtml(data.meta.scrapedAt)} · Not affiliated with Picnic
+    </footer>
+  `;
+
+  document.querySelectorAll<HTMLButtonElement>("[data-dietary]").forEach((button) => {
+    dietaryChips.set(button.dataset.dietary as DietaryTag, button);
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => {
+    pricePresets.set(Number(button.dataset.preset), button);
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-store]").forEach((button) => {
+    storeChips.set(button.dataset.store!, button);
+  });
+
+  return {
+    searchInput: document.querySelector("#search")!,
+    sortSelect: document.querySelector("#sort")!,
+    maxPriceInput: document.querySelector("#maxPrice")!,
+    showUnavailableInput: document.querySelector("#showUnavailable")!,
+    statusText: document.querySelector("#statusText")!,
+    clearButton: document.querySelector("#clearFilters")!,
+    resultsEl: document.querySelector("#results")!,
+    dietaryChips,
+    pricePresets,
+    storeChips,
+  };
+}
+
+function syncControls(state: FilterState, refs: UiRefs): void {
+  if (refs.searchInput.value !== state.query) {
+    refs.searchInput.value = state.query;
+  }
+  refs.sortSelect.value = state.sort;
+  refs.maxPriceInput.value = state.maxPrice !== null ? String(state.maxPrice) : "";
+  refs.showUnavailableInput.checked = state.showUnavailable;
+
+  refs.dietaryChips.forEach((button, tag) => {
+    button.classList.toggle("active", state.dietary.has(tag));
+  });
+  refs.pricePresets.forEach((button, preset) => {
+    button.classList.toggle("active", state.maxPrice === preset);
+  });
+  refs.storeChips.forEach((button, storeId) => {
+    button.classList.toggle("active", state.storeIds.has(storeId));
+  });
+
+  refs.clearButton.hidden = !hasActiveFilters(state);
+}
+
+function updateResults(
+  data: MenuData,
+  index: ReturnType<typeof createSearchIndex>,
+  state: FilterState,
+  refs: UiRefs,
+): void {
+  const results = searchItems(data, index, state);
+  writeStateToUrl(state);
+
+  refs.statusText.textContent = statusMessage(state, results.length);
+  syncControls(state, refs);
+
+  if (results.length === 0) {
+    refs.resultsEl.innerHTML =
+      `<div class="empty">No items match these filters. Try raising the max price or clearing filters.</div>`;
+    return;
+  }
+
+  refs.resultsEl.innerHTML = results.map(({ item }) => renderItemRow(item)).join("");
+}
+
 async function init(): Promise<void> {
   const response = await fetch(`${import.meta.env.BASE_URL}menu.json`);
   if (!response.ok) {
@@ -117,196 +284,85 @@ async function init(): Promise<void> {
   const data = (await response.json()) as MenuData;
   const index = createSearchIndex(data.items);
   let state = defaultState();
+  const refs = mountShell(data);
 
-  const render = () => {
-    const results = searchItems(data, index, state);
-    writeStateToUrl(state);
+  const refresh = () => updateResults(data, index, state, refs);
 
-    const storeOptions = data.stores
-      .map((store) => {
-        const selected = state.storeIds.has(store.id) ? "selected" : "";
-        return `<option value="${escapeAttr(store.id)}" ${selected}>${escapeHtml(store.name)}</option>`;
-      })
-      .join("");
+  refs.searchInput.addEventListener("input", () => {
+    state = { ...state, query: refs.searchInput.value };
+    refresh();
+  });
 
-    const dietaryChips = DIETARY_OPTIONS.map(({ tag, label }) => {
-      const active = state.dietary.has(tag) ? "active" : "";
-      return `<button type="button" class="chip ${active}" data-dietary="${tag}">${label}</button>`;
-    }).join("");
+  refs.sortSelect.addEventListener("change", () => {
+    state = { ...state, sort: refs.sortSelect.value as SortMode };
+    refresh();
+  });
 
-    const pricePresets = PRICE_PRESETS.map((preset) => {
-      const active = state.maxPrice === preset ? "active" : "";
-      return `<button type="button" class="preset ${active}" data-preset="${preset}">$${preset}</button>`;
-    }).join("");
+  refs.maxPriceInput.addEventListener("input", () => {
+    const raw = refs.maxPriceInput.value.trim();
+    state = { ...state, maxPrice: raw ? Number(raw) : null };
+    refresh();
+  });
 
-    app.innerHTML = `
-      <header class="hero">
-        <h1>Picnic Lunch Finder</h1>
-        <p>${data.meta.availableCount} available items across ${data.meta.storeCount} restaurants</p>
-      </header>
+  refs.showUnavailableInput.addEventListener("change", () => {
+    state = { ...state, showUnavailable: refs.showUnavailableInput.checked };
+    refresh();
+  });
 
-      <section class="panel">
-        <div class="search-row">
-          <input
-            id="search"
-            class="search-input"
-            type="search"
-            placeholder="Search meals, ingredients, restaurants..."
-            value="${escapeAttr(state.query)}"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </div>
+  refs.clearButton.addEventListener("click", () => {
+    state = {
+      ...defaultState(),
+      query: "",
+      sort: "relevance",
+      maxPrice: null,
+      storeIds: new Set(),
+      dietary: new Set(),
+      showUnavailable: false,
+    };
+    refresh();
+    refs.searchInput.focus();
+  });
 
-        <div class="controls">
-          <div class="control-row">
-            <label class="inline">
-              Sort
-              <select id="sort">
-                <option value="relevance" ${state.sort === "relevance" ? "selected" : ""}>Relevance</option>
-                <option value="price-asc" ${state.sort === "price-asc" ? "selected" : ""}>Price: low to high</option>
-                <option value="price-desc" ${state.sort === "price-desc" ? "selected" : ""}>Price: high to low</option>
-                <option value="name" ${state.sort === "name" ? "selected" : ""}>Name</option>
-                <option value="restaurant" ${state.sort === "restaurant" ? "selected" : ""}>Restaurant</option>
-              </select>
-            </label>
-
-            <label class="inline">
-              Max price
-              <input
-                id="maxPrice"
-                class="price-input"
-                type="number"
-                min="0"
-                step="0.5"
-                placeholder="Any"
-                value="${state.maxPrice ?? ""}"
-              />
-            </label>
-            ${pricePresets}
-          </div>
-
-          <div class="control-row">
-            ${dietaryChips}
-          </div>
-
-          <div class="control-row">
-            <select id="stores" class="store-filter" multiple size="4" aria-label="Filter restaurants">
-              ${storeOptions}
-            </select>
-            <label class="inline">
-              <input id="showUnavailable" type="checkbox" ${state.showUnavailable ? "checked" : ""} />
-              Show unavailable
-            </label>
-          </div>
-        </div>
-      </section>
-
-      <div class="status-bar">
-        <span>${statusMessage(state, results.length)}</span>
-        ${
-          hasActiveFilters(state)
-            ? `<button type="button" class="clear-btn" id="clearFilters">Clear filters</button>`
-            : ""
-        }
-      </div>
-
-      <section class="results">
-        ${
-          results.length > 0
-            ? results.map(({ item }) => renderCard(item)).join("")
-            : `<div class="empty">No items match these filters. Try raising the max price or clearing filters.</div>`
-        }
-      </section>
-
-      <footer class="footer">
-        Menu snapshot · ${escapeHtml(data.meta.scrapedAt)} · Not affiliated with Picnic
-      </footer>
-    `;
-
-    bindHandlers(render);
-  };
-
-  const bindHandlers = (rerender: () => void) => {
-    const searchInput = document.querySelector<HTMLInputElement>("#search");
-    const sortSelect = document.querySelector<HTMLSelectElement>("#sort");
-    const maxPriceInput = document.querySelector<HTMLInputElement>("#maxPrice");
-    const storesSelect = document.querySelector<HTMLSelectElement>("#stores");
-    const showUnavailableInput = document.querySelector<HTMLInputElement>("#showUnavailable");
-    const clearButton = document.querySelector<HTMLButtonElement>("#clearFilters");
-
-    searchInput?.addEventListener("input", () => {
-      state = { ...state, query: searchInput.value };
-      rerender();
-      searchInput.focus();
-      const end = searchInput.value.length;
-      searchInput.setSelectionRange(end, end);
+  refs.dietaryChips.forEach((button, tag) => {
+    button.addEventListener("click", () => {
+      const next = new Set(state.dietary);
+      if (next.has(tag)) {
+        next.delete(tag);
+      } else {
+        next.add(tag);
+      }
+      state = { ...state, dietary: next };
+      refresh();
     });
+  });
 
-    sortSelect?.addEventListener("change", () => {
-      state = { ...state, sort: sortSelect.value as SortMode };
-      rerender();
-    });
-
-    maxPriceInput?.addEventListener("input", () => {
-      const raw = maxPriceInput.value.trim();
+  refs.pricePresets.forEach((button, preset) => {
+    button.addEventListener("click", () => {
       state = {
         ...state,
-        maxPrice: raw ? Number(raw) : null,
+        maxPrice: state.maxPrice === preset ? null : preset,
       };
-      rerender();
+      refresh();
     });
+  });
 
-    storesSelect?.addEventListener("change", () => {
-      const selected = [...storesSelect.selectedOptions].map((option) => option.value);
-      state = { ...state, storeIds: new Set(selected) };
-      rerender();
+  refs.storeChips.forEach((button, storeId) => {
+    button.addEventListener("click", () => {
+      const next = new Set(state.storeIds);
+      if (next.has(storeId)) {
+        next.delete(storeId);
+      } else {
+        next.add(storeId);
+      }
+      state = { ...state, storeIds: next };
+      refresh();
     });
+  });
 
-    showUnavailableInput?.addEventListener("change", () => {
-      state = { ...state, showUnavailable: showUnavailableInput.checked };
-      rerender();
-    });
-
-    clearButton?.addEventListener("click", () => {
-      state = defaultState();
-      state = {
-        ...state,
-        query: "",
-        sort: "relevance",
-        maxPrice: null,
-        storeIds: new Set(),
-        dietary: new Set(),
-        showUnavailable: false,
-      };
-      rerender();
-    });
-
-    document.querySelectorAll<HTMLButtonElement>("[data-dietary]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const tag = button.dataset.dietary as DietaryTag;
-        const next = new Set(state.dietary);
-        if (next.has(tag)) {
-          next.delete(tag);
-        } else {
-          next.add(tag);
-        }
-        state = { ...state, dietary: next };
-        rerender();
-      });
-    });
-
-    document.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const preset = Number(button.dataset.preset);
-        state = {
-          ...state,
-          maxPrice: state.maxPrice === preset ? null : preset,
-        };
-        rerender();
-      });
-    });
-  };
+  document.querySelector("#clearStores")!.addEventListener("click", () => {
+    state = { ...state, storeIds: new Set() };
+    refresh();
+  });
 
   document.addEventListener("keydown", (event) => {
     const target = event.target as HTMLElement | null;
@@ -317,20 +373,18 @@ async function init(): Promise<void> {
 
     if (event.key === "/" && !typingInField) {
       event.preventDefault();
-      document.querySelector<HTMLInputElement>("#search")?.focus();
+      refs.searchInput.focus();
     }
     if (event.key === "Escape" && !typingInField) {
       state = { ...state, query: "" };
-      render();
+      refresh();
     }
   });
 
-  render();
+  refresh();
 }
 
 init().catch((error) => {
-  if (app) {
-    app.innerHTML = `<div class="empty">Failed to load menu data. Run the index build first.</div>`;
-  }
+  app.innerHTML = `<div class="empty">Failed to load menu data. Run the index build first.</div>`;
   console.error(error);
 });

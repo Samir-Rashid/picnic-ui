@@ -3,7 +3,7 @@ import type { FilterState, MenuData, MenuItem, ScoredItem, SortMode } from "./ty
 
 export function createSearchIndex(items: MenuItem[]): MiniSearch<MenuItem> {
   const index = new MiniSearch<MenuItem>({
-    fields: ["name", "description", "storeName", "searchText"],
+    fields: ["name", "description"],
     storeFields: [
       "id",
       "name",
@@ -18,8 +18,8 @@ export function createSearchIndex(items: MenuItem[]): MiniSearch<MenuItem> {
       "searchText",
     ],
     searchOptions: {
-      boost: { name: 3, storeName: 2, description: 1 },
-      fuzzy: 0.2,
+      boost: { name: 4, description: 1 },
+      fuzzy: 0.15,
       prefix: true,
     },
   });
@@ -46,6 +46,28 @@ function passesFilters(item: MenuItem, state: FilterState): boolean {
   return true;
 }
 
+function nameMatchBoost(item: MenuItem, query: string): number {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return 0;
+  }
+  const name = item.name.toLowerCase();
+  if (name === normalizedQuery) {
+    return 100;
+  }
+  if (name.startsWith(normalizedQuery)) {
+    return 50;
+  }
+  if (name.includes(normalizedQuery)) {
+    return 25;
+  }
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (tokens.length > 1 && tokens.every((token) => name.includes(token))) {
+    return 15;
+  }
+  return 0;
+}
+
 function compareItems(a: MenuItem, b: MenuItem, sort: SortMode): number {
   switch (sort) {
     case "price-asc":
@@ -55,9 +77,7 @@ function compareItems(a: MenuItem, b: MenuItem, sort: SortMode): number {
     case "name":
       return a.name.localeCompare(b.name);
     case "restaurant":
-      return (
-        a.storeName.localeCompare(b.storeName) || a.name.localeCompare(b.name)
-      );
+      return a.storeName.localeCompare(b.storeName) || a.name.localeCompare(b.name);
     default:
       return 0;
   }
@@ -72,13 +92,31 @@ export function searchItems(
   let results: ScoredItem[];
 
   if (query) {
+    const normalizedQuery = query.toLowerCase();
     const hits = index.search(query);
     results = hits
-      .map((hit) => ({
-        item: hit as unknown as MenuItem,
-        score: hit.score,
-      }))
-      .filter(({ item }) => passesFilters(item, state));
+      .map((hit) => {
+        const item = hit as unknown as MenuItem;
+        const boost = nameMatchBoost(item, query);
+        return {
+          item,
+          score: hit.score + boost,
+          boost,
+        };
+      })
+      .filter(({ item, score, boost }) => {
+        if (!passesFilters(item, state)) {
+          return false;
+        }
+        if (boost > 0) {
+          return true;
+        }
+        if (item.description.toLowerCase().includes(normalizedQuery)) {
+          return true;
+        }
+        return score >= 6;
+      })
+      .map(({ item, score }) => ({ item, score }));
   } else {
     results = data.items
       .filter((item) => passesFilters(item, state))
@@ -99,10 +137,11 @@ export function formatPrice(price: number | null): string {
   if (price === null) {
     return "—";
   }
+  const rounded = Math.round(price);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: price % 1 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  }).format(price);
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(rounded);
 }
