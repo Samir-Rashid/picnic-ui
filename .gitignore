@@ -7,3 +7,5 @@ capture.curl
 captured_hubs_main_content.graphql
 data/
 *.har
+web/node_modules/
+web/dist/

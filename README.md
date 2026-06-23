@@ -117,8 +117,53 @@ Required fields:
 | Auth / 401 errors | Capture a fresh curl while logged in |
 | Missing items for one restaurant | Re-run `scrape`; search uses `*` + `a`–`z` and dedupes |
 
+## Search UI
+
+Static lunch finder in [`web/`](web/) — fuzzy search, max-price filter, restaurant filter, dietary chips, and shareable URL state.
+
+### Build the menu index
+
+After scraping (or whenever `data/` changes):
+
+```bash
+uv run python scripts/build_search_index.py
+```
+
+Writes `web/public/menu.json` from `data/all_items_flat.json` and `data/manifest.json`.
+
+### Run locally
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open the URL Vite prints (usually http://localhost:5173).
+
+### Build static site
+
+```bash
+cd web
+npm run build
+```
+
+Output is in `web/dist/` — upload that folder to any static host (GitHub Pages, Cloudflare Pages, S3, etc.).
+
+### UI features
+
+- Instant fuzzy search across item name, description, and restaurant
+- Sort by relevance, price, name, or restaurant
+- Max price filter with $12 / $15 / $20 presets
+- Restaurant multi-select filter
+- Dietary chips (GF, vegan, vegetarian, spicy, etc.)
+- Unavailable items hidden by default
+- Shareable links via URL query params (`?q=bowl&maxPrice=15`)
+
+Keyboard shortcuts: `/` focuses search, `Esc` clears the query.
+
 ## Notes
 
-- Menu content is stable day-to-day; re-run `scrape` anytime to refresh.
+- Menu content is stable day-to-day; re-run `scrape` then `build_search_index.py` to refresh the UI.
 - Do not commit `config.json`, `capture.curl`, or `data/`.
 - Delivery window values come from the captured request and should match what you see in the UI.
