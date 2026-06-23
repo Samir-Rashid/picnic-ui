@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
+FEATURED_PATH = ROOT / "config" / "featured_items.json"
 OUTPUT_PATH = ROOT / "web" / "public" / "menu.json"
 
 DIETARY_RULES: tuple[tuple[str, str], ...] = (
@@ -38,6 +39,23 @@ def is_available(item: dict) -> bool:
     return status == "ITEM_STATUS_AVAILABLE"
 
 
+def load_featured_lookup() -> dict[str, int]:
+    if not FEATURED_PATH.exists():
+        return {}
+
+    payload = json.loads(FEATURED_PATH.read_text())
+    entries = payload.get("items", payload if isinstance(payload, list) else [])
+    lookup: dict[str, int] = {}
+    for index, entry in enumerate(entries):
+        if isinstance(entry, str):
+            item_id = entry
+        else:
+            item_id = entry.get("id")
+        if item_id and item_id not in lookup:
+            lookup[item_id] = index
+    return lookup
+
+
 def load_store_lookup() -> dict[str, dict]:
     manifest = json.loads((DATA_DIR / "manifest.json").read_text())
     lookup: dict[str, dict] = {}
@@ -65,6 +83,7 @@ def build_index() -> dict:
     items_raw = json.loads(flat_path.read_text())
     manifest = json.loads(manifest_path.read_text())
     stores_by_id = load_store_lookup()
+    featured_lookup = load_featured_lookup()
 
     items = []
     for raw in items_raw:
@@ -79,21 +98,25 @@ def build_index() -> dict:
             if part
         )
 
-        items.append(
-            {
-                "id": raw.get("id"),
-                "name": name,
-                "description": description,
-                "price": raw.get("price"),
-                "storeId": store_id,
-                "storeName": store_name,
-                "storeLogo": store.get("logo_url"),
-                "photoUrl": raw.get("photo_url"),
-                "available": is_available(raw),
-                "dietaryTags": parse_dietary_tags(name, description),
-                "searchText": search_text,
-            }
-        )
+        item_id = raw.get("id")
+        special_rank = featured_lookup.get(item_id)
+        record = {
+            "id": item_id,
+            "name": name,
+            "description": description,
+            "price": raw.get("price"),
+            "storeId": store_id,
+            "storeName": store_name,
+            "storeLogo": store.get("logo_url"),
+            "photoUrl": raw.get("photo_url"),
+            "available": is_available(raw),
+            "dietaryTags": parse_dietary_tags(name, description),
+            "searchText": search_text,
+        }
+        if special_rank is not None:
+            record["special"] = True
+            record["specialRank"] = special_rank
+        items.append(record)
 
     stores = [
         {
@@ -131,6 +154,18 @@ def main() -> None:
     payload = build_index()
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(json.dumps(payload, separators=(",", ":")))
+
+    featured_lookup = load_featured_lookup()
+    if featured_lookup:
+        seen_ids = {item["id"] for item in payload["items"]}
+        missing = [item_id for item_id in featured_lookup if item_id not in seen_ids]
+        matched = sum(1 for item in payload["items"] if item.get("special"))
+        print(
+            f"Featured items: {matched} matched, {len(missing)} missing from scrape",
+        )
+        for item_id in missing:
+            print(f"  - missing featured id: {item_id}")
+
     print(f"Wrote {OUTPUT_PATH} ({len(payload['items'])} items, {len(payload['stores'])} stores)")
 
 

@@ -129,7 +129,7 @@ After scraping (or whenever `data/` changes):
 uv run python scripts/build_search_index.py
 ```
 
-Writes `web/public/menu.json` from `data/all_items_flat.json` and `data/manifest.json`.
+Writes `web/public/menu.json` from `data/all_items_flat.json` and `data/manifest.json`. Curated lunch picks in [`config/featured_items.json`](config/featured_items.json) are merged by stable Picnic item ID (`special` flag + default sort rank).
 
 ### Run locally
 

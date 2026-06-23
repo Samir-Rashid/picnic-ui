@@ -19,6 +19,8 @@ export interface MenuItem {
   available: boolean;
   dietaryTags: DietaryTag[];
   searchText: string;
+  special?: boolean;
+  specialRank?: number;
 }
 
 export interface StoreInfo {

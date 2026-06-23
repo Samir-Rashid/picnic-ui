@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "description": "Curated lunch picks. Order = default display rank. IDs are stable Picnic item UUIDs from scrape data.",
+  "items": [
+    { "id": "62aba01c-2240-4304-aab8-fa0a51b3c6a1", "note": "Palmita — (V) Organic Tofu Rice Bowl" },
+    { "id": "f20745f4-4fa5-4834-896c-303461b4b745", "note": "Palmita — (V) Organic Tofu Mixto Bowl" },
+    { "id": "3b471e8e-9a49-4dfc-a610-b19d1d0fd7f2", "note": "Ben's — (V) Chickpea & Potato Hearty Bowl" },
+    { "id": "dd2d528c-abae-4506-a871-0c0518970917", "note": "Moonbowls — Roasted Tofu Bowl" },
+    { "id": "08261548-6468-4107-a789-283168d376a4", "note": "zuzubowls — Jerk Cauliflower Rice Bowl" },
+    { "id": "e3e529ed-8e47-4fd8-8f72-cd3f97f23760", "note": "SÓL — Grilled Veggie & Guacamole Bowl" },
+    { "id": "cf72231e-673b-4582-ac54-f42b3a17f33a", "note": "XENiA — Vegetarian Mezze Bowl" },
+    { "id": "9a836340-f0e9-4561-a618-bdd3c0ba47d4", "note": "Pokeworks — Sweet Shoyu Tofu Bowl" },
+    { "id": "01433015-fce8-43c1-a68c-3f01e1b30abe", "note": "Lotus & Lime — (V) Organic Tofu 50-50 Bowl" },
+    { "id": "0bb34df9-8c58-4b06-bf5f-b54d18de5d39", "note": "House of Tiffins — Vegetarian Millet Biryani Combo" },
+    { "id": "8a93ce5b-df2a-4fc0-949a-f62e97d86093", "note": "The Parantha Street — Chana Masala Combo" },
+    { "id": "3abc1f2a-3b98-4d17-9af7-24dc4d174d1b", "note": "The Parantha Street — Dal Makhani & Rice" },
+    { "id": "7ee23887-ba20-40b4-84a0-cbcace22945b", "note": "Tacos Mil Delicias — GARDEN BOWL" },
+    { "id": "8ad36cb7-e048-4bd7-be43-a8d85f325659", "note": "Gainz and Shreds — Mushroom Black Bean Veggie Tacos" },
+    { "id": "d2c55660-35be-47f4-91b0-4302ab86af12", "note": "Amazing Katsu — Tofu Katsu Curry Don" },
+    { "id": "2977b237-ec28-4313-af7e-be548c082a6b", "note": "Mazala Pizza — Samosa Smash Bowl" }
+  ]
+}

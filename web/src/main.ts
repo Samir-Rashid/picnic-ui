@@ -76,13 +76,14 @@ function escapeAttr(value: string): string {
 function renderItemRow(item: MenuItem): string {
   const photo = item.photoUrl
     ? `<img class="thumb" src="${escapeAttr(item.photoUrl)}" alt="" loading="lazy" decoding="async" />`
-    : `<div class="thumb placeholder">No photo</div>`;
+    : `<div class="thumb placeholder" aria-hidden="true"></div>`;
 
   const storeLogo = item.storeLogo
     ? `<img class="store-logo" src="${escapeAttr(item.storeLogo)}" alt="" loading="lazy" />`
     : "";
 
   const tags = [
+    ...(item.special ? [`<span class="tag special">Special</span>`] : []),
     ...item.dietaryTags.map(
       (tag) => `<span class="tag">${escapeHtml(formatDietaryTag(tag))}</span>`,
     ),
@@ -97,33 +98,47 @@ function renderItemRow(item: MenuItem): string {
     <article class="item-row${item.available ? "" : " unavailable"}">
       ${photo}
       <div class="item-body">
-        <h2 class="item-title">${escapeHtml(item.name)}</h2>
+        <div class="item-head">
+          <h2 class="item-title">${escapeHtml(item.name)}</h2>
+          <div class="item-price">${formatPrice(item.price)}</div>
+        </div>
         <div class="item-meta">${storeLogo}<span>${escapeHtml(item.storeName)}</span></div>
         ${description}
         ${tags ? `<div class="item-tags">${tags}</div>` : ""}
       </div>
-      <div class="item-price">${formatPrice(item.price)}</div>
     </article>
   `;
 }
 
+function storeFilterSummary(state: FilterState): string {
+  if (state.storeIds.size === 0) {
+    return "All";
+  }
+  return `${state.storeIds.size} selected`;
+}
+
 interface UiRefs {
+  toolbar: HTMLElement;
+  filtersToggle: HTMLButtonElement;
+  storeSummaryMeta: HTMLSpanElement;
   searchInput: HTMLInputElement;
   sortSelect: HTMLSelectElement;
   maxPriceInput: HTMLInputElement;
   showUnavailableInput: HTMLInputElement;
+  storeFilterInput: HTMLInputElement;
   statusText: HTMLSpanElement;
   clearButton: HTMLButtonElement;
   resultsEl: HTMLElement;
   dietaryChips: Map<DietaryTag, HTMLButtonElement>;
   pricePresets: Map<number, HTMLButtonElement>;
-  storeChips: Map<string, HTMLButtonElement>;
+  storeCheckboxes: Map<string, HTMLInputElement>;
+  storeOptions: HTMLLabelElement[];
 }
 
 function mountShell(data: MenuData): UiRefs {
   const dietaryChips = new Map<DietaryTag, HTMLButtonElement>();
   const pricePresets = new Map<number, HTMLButtonElement>();
-  const storeChips = new Map<string, HTMLButtonElement>();
+  const storeCheckboxes = new Map<string, HTMLInputElement>();
 
   const dietaryHtml = DIETARY_OPTIONS.map(({ tag, label }) => {
     return `<button type="button" class="chip" data-dietary="${tag}">${label}</button>`;
@@ -136,14 +151,17 @@ function mountShell(data: MenuData): UiRefs {
 
   const storeHtml = data.stores
     .map(
-      (store) =>
-        `<button type="button" class="chip store-chip" data-store="${escapeAttr(store.id)}" title="${escapeAttr(store.name)}">${escapeHtml(store.name)}</button>`,
+      (store) => `
+        <label class="store-option">
+          <input type="checkbox" data-store="${escapeAttr(store.id)}" />
+          <span>${escapeHtml(store.name)}</span>
+        </label>`,
     )
     .join("");
 
   app.innerHTML = `
-    <section class="toolbar">
-      <div class="toolbar-section">
+    <section class="toolbar" id="toolbar">
+      <div class="toolbar-section toolbar-search">
         <input
           id="search"
           class="search-input"
@@ -152,58 +170,75 @@ function mountShell(data: MenuData): UiRefs {
           autocomplete="off"
           spellcheck="false"
         />
+        <button type="button" class="filters-toggle" id="filtersToggle" hidden>Filters</button>
       </div>
 
-      <div class="toolbar-section">
-        <div class="filter-grid">
-          <div class="filter-row">
-            <label class="field">
-              Sort
-              <select id="sort">
-                <option value="relevance">Relevance</option>
-                <option value="price-asc">Price: low to high</option>
-                <option value="price-desc">Price: high to low</option>
-                <option value="name">Name</option>
-                <option value="restaurant">Restaurant</option>
-              </select>
-            </label>
+      <div class="toolbar-filters-wrap">
+        <div class="toolbar-section toolbar-filters">
+          <div class="filter-grid">
+            <div class="filter-row">
+              <label class="field">
+                Sort
+                <select id="sort">
+                  <option value="relevance">Relevance</option>
+                  <option value="price-asc">Price: low to high</option>
+                  <option value="price-desc">Price: high to low</option>
+                  <option value="name">Name</option>
+                  <option value="restaurant">Restaurant</option>
+                </select>
+              </label>
 
-            <label class="field">
-              Max
-              <input id="maxPrice" type="number" min="0" step="1" placeholder="Any" />
-            </label>
-            ${presetHtml}
-          </div>
-
-          <div>
-            <div class="chip-group-label">Dietary</div>
-            <div class="filter-row">${dietaryHtml}</div>
-          </div>
-
-          <div>
-            <div class="chip-group-label">Restaurants (${data.stores.length})</div>
-            <div class="filter-row store-chips">${storeHtml}</div>
-            <div class="store-actions">
-              <button type="button" class="text-btn" id="clearStores">Clear</button>
+              <label class="field">
+                Max
+                <input id="maxPrice" type="number" min="0" step="1" placeholder="Any" />
+              </label>
+              ${presetHtml}
             </div>
-          </div>
 
-          <div class="filter-row">
-            <label class="checkbox-field">
-              <input id="showUnavailable" type="checkbox" />
-              Show unavailable
-            </label>
+            <div>
+              <div class="chip-group-label">Dietary</div>
+              <div class="filter-row">${dietaryHtml}</div>
+            </div>
+
+            <details class="store-details">
+              <summary class="store-summary">
+                <span>Restaurants (${data.stores.length})</span>
+                <span class="store-summary-meta" id="storeSummaryMeta">All</span>
+              </summary>
+              <div class="store-details-body">
+                <div class="filter-group-head">
+                  <button type="button" class="text-btn" id="clearStores">Clear</button>
+                </div>
+                <input
+                  id="storeFilter"
+                  class="store-filter-input"
+                  type="search"
+                  placeholder="Filter restaurants…"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <div class="store-list">${storeHtml}</div>
+              </div>
+            </details>
+
+            <div class="filter-row">
+              <label class="checkbox-field">
+                <input id="showUnavailable" type="checkbox" />
+                Show unavailable
+              </label>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <div class="status-bar">
-      <span id="statusText"></span>
-      <button type="button" class="text-btn" id="clearFilters" hidden>Clear filters</button>
-    </div>
-
-    <section class="results" id="results"></section>
+    <section class="results-panel">
+      <div class="results-header">
+        <span id="statusText"></span>
+        <button type="button" class="text-btn" id="clearFilters" hidden>Clear filters</button>
+      </div>
+      <div class="results" id="results"></div>
+    </section>
 
     <footer class="page-footer">
       Menu snapshot · ${escapeHtml(data.meta.scrapedAt)} · Not affiliated with Picnic
@@ -216,22 +251,37 @@ function mountShell(data: MenuData): UiRefs {
   document.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => {
     pricePresets.set(Number(button.dataset.preset), button);
   });
-  document.querySelectorAll<HTMLButtonElement>("[data-store]").forEach((button) => {
-    storeChips.set(button.dataset.store!, button);
+  document.querySelectorAll<HTMLInputElement>("[data-store]").forEach((input) => {
+    storeCheckboxes.set(input.dataset.store!, input);
   });
 
+  const storeOptions = [...document.querySelectorAll<HTMLLabelElement>(".store-option")];
+
   return {
+    toolbar: document.querySelector("#toolbar")!,
+    filtersToggle: document.querySelector("#filtersToggle")!,
+    storeSummaryMeta: document.querySelector("#storeSummaryMeta")!,
     searchInput: document.querySelector("#search")!,
     sortSelect: document.querySelector("#sort")!,
     maxPriceInput: document.querySelector("#maxPrice")!,
     showUnavailableInput: document.querySelector("#showUnavailable")!,
+    storeFilterInput: document.querySelector("#storeFilter")!,
     statusText: document.querySelector("#statusText")!,
     clearButton: document.querySelector("#clearFilters")!,
     resultsEl: document.querySelector("#results")!,
     dietaryChips,
     pricePresets,
-    storeChips,
+    storeCheckboxes,
+    storeOptions,
   };
+}
+
+function filterStoreList(refs: UiRefs): void {
+  const query = refs.storeFilterInput.value.trim().toLowerCase();
+  refs.storeOptions.forEach((option) => {
+    const name = option.textContent?.trim().toLowerCase() ?? "";
+    option.hidden = query.length > 0 && !name.includes(query);
+  });
 }
 
 function syncControls(state: FilterState, refs: UiRefs): void {
@@ -248,11 +298,47 @@ function syncControls(state: FilterState, refs: UiRefs): void {
   refs.pricePresets.forEach((button, preset) => {
     button.classList.toggle("active", state.maxPrice === preset);
   });
-  refs.storeChips.forEach((button, storeId) => {
-    button.classList.toggle("active", state.storeIds.has(storeId));
+  refs.storeCheckboxes.forEach((input, storeId) => {
+    input.checked = state.storeIds.has(storeId);
   });
+  refs.storeSummaryMeta.textContent = storeFilterSummary(state);
 
   refs.clearButton.hidden = !hasActiveFilters(state);
+}
+
+function setupScrollCollapse(refs: UiRefs): void {
+  const collapseThreshold = 40;
+
+  const update = () => {
+    const scrolled = window.scrollY > collapseThreshold;
+    refs.filtersToggle.hidden = !scrolled;
+    if (!scrolled) {
+      refs.toolbar.classList.remove("is-scrolled", "filters-open");
+      refs.filtersToggle.textContent = "Filters";
+      return;
+    }
+    refs.toolbar.classList.add("is-scrolled");
+    refs.filtersToggle.textContent = refs.toolbar.classList.contains("filters-open")
+      ? "Hide"
+      : "Filters";
+  };
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      update();
+    },
+    { passive: true },
+  );
+
+  refs.filtersToggle.addEventListener("click", () => {
+    refs.toolbar.classList.toggle("filters-open");
+    refs.filtersToggle.textContent = refs.toolbar.classList.contains("filters-open")
+      ? "Hide"
+      : "Filters";
+  });
+
+  update();
 }
 
 function updateResults(
@@ -285,6 +371,7 @@ async function init(): Promise<void> {
   const index = createSearchIndex(data.items);
   let state = defaultState();
   const refs = mountShell(data);
+  setupScrollCollapse(refs);
 
   const refresh = () => updateResults(data, index, state, refs);
 
@@ -307,6 +394,10 @@ async function init(): Promise<void> {
   refs.showUnavailableInput.addEventListener("change", () => {
     state = { ...state, showUnavailable: refs.showUnavailableInput.checked };
     refresh();
+  });
+
+  refs.storeFilterInput.addEventListener("input", () => {
+    filterStoreList(refs);
   });
 
   refs.clearButton.addEventListener("click", () => {
@@ -346,13 +437,13 @@ async function init(): Promise<void> {
     });
   });
 
-  refs.storeChips.forEach((button, storeId) => {
-    button.addEventListener("click", () => {
+  refs.storeCheckboxes.forEach((input, storeId) => {
+    input.addEventListener("change", () => {
       const next = new Set(state.storeIds);
-      if (next.has(storeId)) {
-        next.delete(storeId);
-      } else {
+      if (input.checked) {
         next.add(storeId);
+      } else {
+        next.delete(storeId);
       }
       state = { ...state, storeIds: next };
       refresh();

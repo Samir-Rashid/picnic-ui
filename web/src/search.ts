@@ -16,6 +16,8 @@ export function createSearchIndex(items: MenuItem[]): MiniSearch<MenuItem> {
       "available",
       "dietaryTags",
       "searchText",
+      "special",
+      "specialRank",
     ],
     searchOptions: {
       boost: { name: 4, description: 1 },
@@ -66,6 +68,16 @@ function nameMatchBoost(item: MenuItem, query: string): number {
     return 15;
   }
   return 0;
+}
+
+function compareSpecials(a: MenuItem, b: MenuItem): number {
+  const aRank = a.special ? (a.specialRank ?? 0) : Number.POSITIVE_INFINITY;
+  const bRank = b.special ? (b.specialRank ?? 0) : Number.POSITIVE_INFINITY;
+  return aRank - bRank;
+}
+
+function isDefaultBrowse(state: FilterState): boolean {
+  return !state.query.trim() && state.sort === "relevance";
 }
 
 function compareItems(a: MenuItem, b: MenuItem, sort: SortMode): number {
@@ -123,11 +135,17 @@ export function searchItems(
       .map((item) => ({ item, score: 0 }));
   }
 
-  const sort = query ? state.sort : state.sort === "relevance" ? "name" : state.sort;
-  if (sort === "relevance") {
+  if (query && state.sort === "relevance") {
     results.sort((a, b) => b.score - a.score || compareItems(a.item, b.item, "name"));
+  } else if (isDefaultBrowse(state)) {
+    results.sort(
+      (a, b) =>
+        compareSpecials(a.item, b.item) || compareItems(a.item, b.item, "name"),
+    );
   } else {
-    results.sort((a, b) => compareItems(a.item, b.item, sort));
+    const sort = query || state.sort !== "relevance" ? state.sort : "name";
+    const effectiveSort = sort === "relevance" ? "name" : sort;
+    results.sort((a, b) => compareItems(a.item, b.item, effectiveSort));
   }
 
   return results;
