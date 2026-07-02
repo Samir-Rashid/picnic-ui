@@ -131,6 +131,16 @@ uv run python scripts/build_search_index.py
 
 Writes `web/public/menu.json` from `data/all_items_flat.json` and `data/manifest.json`. Curated lunch picks in [`config/featured_items.json`](config/featured_items.json) are merged by stable Picnic item ID (`special` flag + default sort rank).
 
+### LLM text export
+
+The UI footer link **Download menu for LLM** builds a plain-text export on demand from the loaded `menu.json` (restaurant, dish name, price, availability, tags, description — no URLs or IDs).
+
+CLI equivalent:
+
+```bash
+uv run python scripts/export_llm_menu.py
+```
+
 ### Run locally
 
 ```bash

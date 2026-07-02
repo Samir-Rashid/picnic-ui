@@ -1,4 +1,5 @@
 import "./style.css";
+import { openLlmExport } from "./llmExport";
 import { createSearchIndex, formatPrice, searchItems } from "./search";
 import type { DietaryTag, FilterState, MenuData, MenuItem, SortMode } from "./types";
 import { readStateFromUrl, writeStateToUrl } from "./urlState";
@@ -235,14 +236,16 @@ function mountShell(data: MenuData): UiRefs {
     <section class="results-panel">
       <div class="results-header">
         <span id="statusText"></span>
-        <button type="button" class="text-btn" id="clearFilters" hidden>Clear filters</button>
+        <div class="results-header-end">
+          <span class="results-meta">
+            Menu snapshot · ${escapeHtml(data.meta.scrapedAt)} · Not affiliated with Picnic ·
+          </span>
+          <button type="button" class="text-btn" id="llmExport">Download menu for LLM</button>
+          <button type="button" class="text-btn" id="clearFilters" hidden>Clear filters</button>
+        </div>
       </div>
       <div class="results" id="results"></div>
     </section>
-
-    <footer class="page-footer">
-      Menu snapshot · ${escapeHtml(data.meta.scrapedAt)} · Not affiliated with Picnic
-    </footer>
   `;
 
   document.querySelectorAll<HTMLButtonElement>("[data-dietary]").forEach((button) => {
@@ -372,6 +375,10 @@ async function init(): Promise<void> {
   let state = defaultState();
   const refs = mountShell(data);
   setupScrollCollapse(refs);
+
+  document.querySelector("#llmExport")!.addEventListener("click", () => {
+    openLlmExport(data);
+  });
 
   const refresh = () => updateResults(data, index, state, refs);
 

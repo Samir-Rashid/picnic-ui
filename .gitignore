@@ -9,3 +9,4 @@ data/
 *.har
 web/node_modules/
 web/dist/
+web/public/menu-for-llm.txt
