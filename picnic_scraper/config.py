@@ -34,6 +34,7 @@ class ScraperConfig:
     cookies: str
     facility_id: str | None = None
     filters: dict[str, Any] = field(default_factory=dict)
+    store_content: dict[str, Any] = field(default_factory=dict)
     headers: dict[str, str] = field(default_factory=dict)
 
     @classmethod
@@ -52,6 +53,7 @@ class ScraperConfig:
             cookies=data["cookies"],
             facility_id=data.get("facility_id"),
             filters=data.get("filters") or {},
+            store_content=data.get("store_content") or {},
             headers=data.get("headers") or {},
         )
 

@@ -16,10 +16,10 @@ Authenticated requests use browser cookies (email OTP login). Your office hub is
 
 Scrape flow:
 
-1. `HubsMainContent` — list all restaurants for your hub/route
-2. `SearchItemsAndStoresForHub` — collect menu items via wildcard and `a`–`z` searches, then dedupe
+1. `HubsMainContent` — list all restaurants for your hub/route (store IDs, slugs, facility IDs)
+2. `storeContent` — fetch the **full menu** for each restaurant (same API the store page uses)
 
-The home page only embeds featured items per restaurant. Search is how we collect the full catalog.
+The home page only embeds a few featured items per restaurant. Per-store `storeContent` is the complete catalog.
 
 ## One-time setup
 
@@ -49,26 +49,37 @@ Chrome: View → Developer → Developer Tools → Network
    `order.trypicnic.com/api/picnic/graphql?operation=HubsMainContent`
 4. Right-click the request → **Copy as cURL**
 
-### 4. Save plain text
+### 4. Capture a store menu request
 
-Save the copied command as `capture.curl` in the repo root.
+1. Open any restaurant page (e.g. Sushi Boat)
+2. In Network, find the successful `storeContent` request:
+   `order.trypicnic.com/api/picnic/graphql?operation=storeContent`
+3. Copy as cURL → save as `capture_store_content.curl`
+
+### 5. Save plain text
+
+Save the copied commands as `capture.curl` and `capture_store_content.curl` in the repo root.
 
 Important: the file must be plain UTF-8 text starting with `curl`. If your editor saves gibberish/binary, paste into TextEdit → Format → Make Plain Text, then save again.
 
-### 5. Build config
+### 6. Build config
 
 ```bash
 uv run python main.py capture capture.curl
+uv run python main.py capture capture_store_content.curl
 ```
+
+The second command merges into the same `config.json` (updates cookies/headers if newer).
 
 This writes:
 
-- `config.json` — cookies, hub/route, delivery window, headers
-- `captured_hubs_main_content.graphql` — exact query copied from your browser
+- `config.json` — cookies, hub/route, delivery window, headers, store menu defaults
+- `captured_hubs_main_content.graphql` — listing query from your browser
+- `captured_store_content.graphql` — per-store menu query from your browser
 
-Both files are gitignored.
+All are gitignored.
 
-### 6. Verify
+### 7. Verify
 
 ```bash
 uv run python main.py probe
@@ -76,7 +87,7 @@ uv run python main.py probe
 
 You should see your restaurants (for example, 40 stores for a large office hub).
 
-### 7. Scrape
+### 8. Scrape
 
 ```bash
 uv run python main.py scrape
@@ -115,7 +126,8 @@ Required fields:
 | `capture.curl does not look like plain-text curl` | Re-copy from DevTools and save as plain text |
 | `probe` returns 0 stores | Cookies expired — capture a fresh curl |
 | Auth / 401 errors | Capture a fresh curl while logged in |
-| Missing items for one restaurant | Re-run `scrape`; search uses `*` + `a`–`z` and dedupes |
+| Missing `captured_store_content.graphql` | Capture a `storeContent` curl from any restaurant page |
+| Missing items for one restaurant | Re-run `scrape`; each store is fetched via `storeContent` |
 
 ## Search UI
 

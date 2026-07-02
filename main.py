@@ -50,8 +50,12 @@ def cmd_probe(config_path: Path) -> int:
 def cmd_capture(curl_path: Path, output_path: Path) -> int:
     config = write_config_from_curl(curl_path, output_path)
     print(f"Wrote {output_path}")
-    if (output_path.parent / "captured_hubs_main_content.graphql").exists():
-        print("Wrote captured_hubs_main_content.graphql")
+    for query_name in (
+        "captured_hubs_main_content.graphql",
+        "captured_store_content.graphql",
+    ):
+        if (output_path.parent / query_name).exists():
+            print(f"Wrote {query_name}")
     print(
         json.dumps(
             {

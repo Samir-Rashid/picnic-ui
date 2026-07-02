@@ -13,6 +13,12 @@
     "removeItemModifiers": true
   },
   "facility_id": null,
+  "store_content": {
+    "facilityId": "PASTE_FROM_STORECONTENT_CURL",
+    "customerInteractionSource": "CUSTOMER_INTERACTION_SOURCE_EATER_APP",
+    "serviceSlug": "picnic",
+    "fulfillmentMode": "FULFILLMENT_MODE_RESTAURANT_DELIVERY"
+  },
   "cookies": "PASTE_COOKIE_HEADER_FROM_DEVTOOLS",
   "headers": {
     "application-version": "PASTE_FROM_DEVTOOLS",

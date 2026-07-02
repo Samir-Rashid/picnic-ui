@@ -4,7 +4,9 @@ __pycache__/
 .env
 config.json
 capture.curl
+capture_store_content.curl
 captured_hubs_main_content.graphql
+captured_store_content.graphql
 data/
 *.har
 web/node_modules/

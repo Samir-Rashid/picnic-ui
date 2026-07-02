@@ -9,6 +9,17 @@ def load_hubs_main_content_query(repo_root: Path | None = None) -> str:
     return HUBS_MAIN_CONTENT_FALLBACK
 
 
+def load_store_content_query(repo_root: Path | None = None) -> str:
+    root = repo_root or Path.cwd()
+    captured = root / "captured_store_content.graphql"
+    if not captured.exists():
+        raise FileNotFoundError(
+            f"Missing {captured}. Capture a storeContent curl from a restaurant page: "
+            "uv run python main.py capture capture_store_content.curl"
+        )
+    return captured.read_text()
+
+
 HUBS_MAIN_CONTENT_FALLBACK = """
 query HubsMainContent($hubsMainContentInput: HubsMainContentInput!) {
   hubsMainContent(input: $hubsMainContentInput) {
