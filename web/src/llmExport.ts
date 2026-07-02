@@ -17,7 +17,6 @@ function formatTags(item: MenuItem): string {
 function formatItemBlock(item: MenuItem): string {
   const lines = [
     `### ${item.name} — ${formatPrice(item.price)}`,
-    `Status: ${item.available ? "available" : "unavailable"}`,
     `Tags: ${formatTags(item)}`,
   ];
   const description = cleanText(item.description);
@@ -27,14 +26,19 @@ function formatItemBlock(item: MenuItem): string {
   return lines.join("\n");
 }
 
+function availableItems(data: MenuData): MenuItem[] {
+  return data.items.filter((item) => item.available);
+}
+
 /**
  * Plain-text menu export for pasting into an LLM.
- * Keeps only fields useful for lunch Q&A: restaurant, dish name, price,
- * availability, dietary hints, and description.
+ * Includes only available items — fields: name, price, tags, description.
  */
 export function formatMenuForLlm(data: MenuData): string {
+  const items = availableItems(data);
   const itemsByStore = new Map<string, MenuItem[]>();
-  for (const item of data.items) {
+
+  for (const item of items) {
     const bucket = itemsByStore.get(item.storeName) ?? [];
     bucket.push(item);
     itemsByStore.set(item.storeName, bucket);
@@ -43,10 +47,10 @@ export function formatMenuForLlm(data: MenuData): string {
   const header = [
     "PICNIC OFFICE LUNCH MENU (text export)",
     `Snapshot: ${data.meta.scrapedAt}`,
-    `Restaurants: ${data.meta.storeCount}`,
-    `Items: ${data.meta.itemCount} total, ${data.meta.availableCount} available`,
+    `Restaurants: ${itemsByStore.size}`,
+    `Items: ${items.length}`,
     "",
-    "Fields per item: name, price, availability, tags, description.",
+    "Fields per item: name, price, tags, description.",
     "Tags are auto-detected hints and may be incomplete.",
     "",
     "---",
@@ -55,8 +59,8 @@ export function formatMenuForLlm(data: MenuData): string {
 
   const storeSections = [...itemsByStore.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([storeName, items]) => {
-      const sortedItems = [...items].sort((a, b) => a.name.localeCompare(b.name));
+    .map(([storeName, storeItems]) => {
+      const sortedItems = [...storeItems].sort((a, b) => a.name.localeCompare(b.name));
       const blocks = sortedItems.map((item) => formatItemBlock(item)).join("\n\n");
       return `## ${storeName}\n\n${blocks}`;
     });

@@ -84,7 +84,7 @@ function renderItemRow(item: MenuItem): string {
     : "";
 
   const tags = [
-    ...(item.special ? [`<span class="tag special">Special</span>`] : []),
+    ...(item.special ? [`<span class="tag">Special</span>`] : []),
     ...item.dietaryTags.map(
       (tag) => `<span class="tag">${escapeHtml(formatDietaryTag(tag))}</span>`,
     ),
@@ -128,6 +128,7 @@ interface UiRefs {
   showUnavailableInput: HTMLInputElement;
   storeFilterInput: HTMLInputElement;
   statusText: HTMLSpanElement;
+  llmExportButton: HTMLButtonElement;
   clearButton: HTMLButtonElement;
   resultsEl: HTMLElement;
   dietaryChips: Map<DietaryTag, HTMLButtonElement>;
@@ -237,11 +238,15 @@ function mountShell(data: MenuData): UiRefs {
       <div class="results-header">
         <span id="statusText"></span>
         <div class="results-header-end">
-          <span class="results-meta">
-            Menu snapshot · ${escapeHtml(data.meta.scrapedAt)} · Not affiliated with Picnic ·
-          </span>
-          <button type="button" class="text-btn" id="llmExport">Download menu for LLM</button>
-          <button type="button" class="text-btn" id="clearFilters" hidden>Clear filters</button>
+          <p class="results-meta">
+            Menu snapshot ${escapeHtml(data.meta.scrapedAt)}
+            <span class="results-meta-sep" aria-hidden="true">·</span>
+            Not affiliated with Picnic
+          </p>
+          <div class="results-actions">
+            <button type="button" class="link-btn" id="llmExport">Download menu for LLM</button>
+            <button type="button" class="link-btn" id="clearFilters" hidden>Clear filters</button>
+          </div>
         </div>
       </div>
       <div class="results" id="results"></div>
@@ -270,6 +275,7 @@ function mountShell(data: MenuData): UiRefs {
     showUnavailableInput: document.querySelector("#showUnavailable")!,
     storeFilterInput: document.querySelector("#storeFilter")!,
     statusText: document.querySelector("#statusText")!,
+    llmExportButton: document.querySelector("#llmExport")!,
     clearButton: document.querySelector("#clearFilters")!,
     resultsEl: document.querySelector("#results")!,
     dietaryChips,
@@ -376,7 +382,7 @@ async function init(): Promise<void> {
   const refs = mountShell(data);
   setupScrollCollapse(refs);
 
-  document.querySelector("#llmExport")!.addEventListener("click", () => {
+  refs.llmExportButton.addEventListener("click", () => {
     openLlmExport(data);
   });
 

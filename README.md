@@ -145,7 +145,7 @@ Writes `web/public/menu.json` from `data/all_items_flat.json` and `data/manifest
 
 ### LLM text export
 
-The UI footer link **Download menu for LLM** builds a plain-text export on demand from the loaded `menu.json` (restaurant, dish name, price, availability, tags, description — no URLs or IDs).
+The UI footer link **Download menu for LLM** builds a plain-text export on demand from the loaded `menu.json` (available items only: restaurant, dish name, price, tags, description — no URLs or IDs).
 
 CLI equivalent:
 

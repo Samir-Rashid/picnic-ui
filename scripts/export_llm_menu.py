@@ -34,7 +34,6 @@ def format_tags(item: dict) -> str:
 def format_item_block(item: dict) -> str:
     lines = [
         f"### {item['name']} — {format_price(item.get('price'))}",
-        f"Status: {'available' if item.get('available') else 'unavailable'}",
         f"Tags: {format_tags(item)}",
     ]
     description = clean_text(item.get("description", ""))
@@ -45,18 +44,19 @@ def format_item_block(item: dict) -> str:
 
 def format_menu_for_llm(data: dict) -> str:
     meta = data["meta"]
+    available = [item for item in data["items"] if item.get("available")]
     items_by_store: dict[str, list[dict]] = {}
-    for item in data["items"]:
+    for item in available:
         items_by_store.setdefault(item["storeName"], []).append(item)
 
     header = "\n".join(
         [
             "PICNIC OFFICE LUNCH MENU (text export)",
             f"Snapshot: {meta['scrapedAt']}",
-            f"Restaurants: {meta['storeCount']}",
-            f"Items: {meta['itemCount']} total, {meta['availableCount']} available",
+            f"Restaurants: {len(items_by_store)}",
+            f"Items: {len(available)}",
             "",
-            "Fields per item: name, price, availability, tags, description.",
+            "Fields per item: name, price, tags, description.",
             "Tags are auto-detected hints and may be incomplete.",
             "",
             "---",
@@ -81,10 +81,11 @@ def main() -> None:
         raise FileNotFoundError(f"Missing {menu_path}. Run: uv run python scripts/build_search_index.py")
 
     data = json.loads(menu_path.read_text())
+    available = [item for item in data["items"] if item.get("available")]
     text = format_menu_for_llm(data)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text)
-    print(f"Wrote {out_path} ({len(text):,} chars, {len(data['items'])} items)")
+    print(f"Wrote {out_path} ({len(text):,} chars, {len(available)} available items)")
 
 
 if __name__ == "__main__":
