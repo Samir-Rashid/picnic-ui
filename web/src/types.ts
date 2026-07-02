@@ -14,6 +14,8 @@ export interface MenuItem {
   price: number | null;
   storeId: string;
   storeName: string;
+  storeUrl?: string;
+  itemUrl?: string;
   storeLogo: string | null;
   photoUrl: string | null;
   available: boolean;
@@ -27,6 +29,7 @@ export interface StoreInfo {
   id: string;
   name: string;
   logoUrl: string | null;
+  storeUrl?: string;
 }
 
 export interface MenuData {

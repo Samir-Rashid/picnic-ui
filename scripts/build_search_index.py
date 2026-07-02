@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
@@ -56,6 +57,32 @@ def load_featured_lookup() -> dict[str, int]:
     return lookup
 
 
+def build_store_url(
+    brand_slug: str | None,
+    location_slug: str | None,
+    store_id: str,
+) -> str | None:
+    if not brand_slug or not location_slug:
+        return None
+    return f"https://order.trypicnic.com/s/{brand_slug}/{location_slug}/{store_id}"
+
+
+def build_item_url(
+    brand_slug: str | None,
+    location_slug: str | None,
+    store_id: str,
+    item_name: str,
+    item_id: str,
+) -> str | None:
+    if not brand_slug or not location_slug or not item_name or not item_id:
+        return None
+    name_segment = quote(item_name, safe="")
+    return (
+        f"https://order.trypicnic.com/s/{brand_slug}/{location_slug}/"
+        f"{store_id}/{name_segment}/{item_id}"
+    )
+
+
 def load_store_lookup() -> dict[str, dict]:
     manifest = json.loads((DATA_DIR / "manifest.json").read_text())
     lookup: dict[str, dict] = {}
@@ -63,12 +90,15 @@ def load_store_lookup() -> dict[str, dict]:
         store_id = store["store_id"]
         menu_path = DATA_DIR / "menus" / f"{store_id}.json"
         logo_url = None
+        location_slug = store.get("location_slug")
         if menu_path.exists():
             menu_data = json.loads(menu_path.read_text())
             logo_url = menu_data.get("logo_url")
+            location_slug = menu_data.get("location_slug") or location_slug
         lookup[store_id] = {
             "name": store.get("name") or store.get("brand_name") or store_id,
             "brand_slug": store.get("brand_slug"),
+            "location_slug": location_slug,
             "logo_url": logo_url,
         }
     return lookup
@@ -116,16 +146,39 @@ def build_index() -> dict:
         if special_rank is not None:
             record["special"] = True
             record["specialRank"] = special_rank
+        store_url = build_store_url(
+            store.get("brand_slug"),
+            store.get("location_slug"),
+            store_id,
+        )
+        if store_url:
+            record["storeUrl"] = store_url
+        item_url = build_item_url(
+            store.get("brand_slug"),
+            store.get("location_slug"),
+            store_id,
+            name,
+            item_id,
+        )
+        if item_url:
+            record["itemUrl"] = item_url
         items.append(record)
 
-    stores = [
-        {
+    stores = []
+    for store_id, info in sorted(stores_by_id.items(), key=lambda row: row[1]["name"].lower()):
+        store_record = {
             "id": store_id,
             "name": info["name"],
             "logoUrl": info.get("logo_url"),
         }
-        for store_id, info in sorted(stores_by_id.items(), key=lambda row: row[1]["name"].lower())
-    ]
+        store_url = build_store_url(
+            info.get("brand_slug"),
+            info.get("location_slug"),
+            store_id,
+        )
+        if store_url:
+            store_record["storeUrl"] = store_url
+        stores.append(store_record)
 
     scraped_at = manifest.get("delivery_window_start")
     if scraped_at:

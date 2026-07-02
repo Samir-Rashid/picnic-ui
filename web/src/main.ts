@@ -74,6 +74,22 @@ function escapeAttr(value: string): string {
   return escapeHtml(value);
 }
 
+function renderItemTitle(item: MenuItem): string {
+  const name = escapeHtml(item.name);
+  if (item.itemUrl) {
+    return `<a class="item-link" href="${escapeAttr(item.itemUrl)}" target="_blank" rel="noopener noreferrer">${name}</a>`;
+  }
+  return name;
+}
+
+function renderStoreName(item: MenuItem): string {
+  const name = escapeHtml(item.storeName);
+  if (item.storeUrl) {
+    return `<a class="store-link" href="${escapeAttr(item.storeUrl)}" target="_blank" rel="noopener noreferrer">${name}</a>`;
+  }
+  return `<span>${name}</span>`;
+}
+
 function renderItemRow(item: MenuItem): string {
   const photo = item.photoUrl
     ? `<img class="thumb" src="${escapeAttr(item.photoUrl)}" alt="" loading="lazy" decoding="async" />`
@@ -100,10 +116,10 @@ function renderItemRow(item: MenuItem): string {
       ${photo}
       <div class="item-body">
         <div class="item-head">
-          <h2 class="item-title">${escapeHtml(item.name)}</h2>
+          <h2 class="item-title">${renderItemTitle(item)}</h2>
           <div class="item-price">${formatPrice(item.price)}</div>
         </div>
-        <div class="item-meta">${storeLogo}<span>${escapeHtml(item.storeName)}</span></div>
+        <div class="item-meta">${storeLogo}${renderStoreName(item)}</div>
         ${description}
         ${tags ? `<div class="item-tags">${tags}</div>` : ""}
       </div>
@@ -198,7 +214,7 @@ function mountShell(data: MenuData): UiRefs {
             </div>
 
             <div>
-              <div class="chip-group-label">Dietary</div>
+              <div class="chip-group-label">Dietary (heuristic)</div>
               <div class="filter-row">${dietaryHtml}</div>
             </div>
 
@@ -208,17 +224,17 @@ function mountShell(data: MenuData): UiRefs {
                 <span class="store-summary-meta" id="storeSummaryMeta">All</span>
               </summary>
               <div class="store-details-body">
-                <div class="filter-group-head">
+                <div class="store-filter-row">
+                  <input
+                    id="storeFilter"
+                    class="store-filter-input"
+                    type="search"
+                    placeholder="Filter restaurants…"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
                   <button type="button" class="text-btn" id="clearStores">Clear</button>
                 </div>
-                <input
-                  id="storeFilter"
-                  class="store-filter-input"
-                  type="search"
-                  placeholder="Filter restaurants…"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
                 <div class="store-list">${storeHtml}</div>
               </div>
             </details>
@@ -240,9 +256,8 @@ function mountShell(data: MenuData): UiRefs {
         <div class="results-header-end">
           <p class="results-meta">
             Menu snapshot ${escapeHtml(data.meta.scrapedAt)}
-            <span class="results-meta-sep" aria-hidden="true">·</span>
-            Not affiliated with Picnic
           </p>
+          <span class="results-meta-note">Not affiliated with Picnic</span>
           <div class="results-actions">
             <button type="button" class="link-btn" id="llmExport">Download menu for LLM</button>
             <button type="button" class="link-btn" id="clearFilters" hidden>Clear filters</button>
