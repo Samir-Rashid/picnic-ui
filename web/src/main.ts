@@ -406,16 +406,18 @@ function mountShell(data: MenuData): UiRefs {
   app.innerHTML = `
     <section class="toolbar" id="toolbar">
       <div class="toolbar-pin" id="toolbarPin">
-        <div class="toolbar-pin-inner">
-          <input
-            id="search"
-            class="search-input"
-            type="search"
-            placeholder="Search dishes, ingredients…  ( / to focus )"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button type="button" class="filters-toggle" id="filtersToggle" hidden>Filters</button>
+        <div class="toolbar-pin-stack">
+          <div class="toolbar-pin-inner">
+            <input
+              id="search"
+              class="search-input"
+              type="search"
+              placeholder="Search dishes, ingredients…  ( / to focus )"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="button" class="filters-toggle" id="filtersToggle">Filters</button>
+          </div>
         </div>
       </div>
       <div class="toolbar-pin-spacer" id="toolbarPinSpacer" aria-hidden="true"></div>
@@ -573,8 +575,12 @@ function getScrollY(): number {
 }
 
 function setupScrollCollapse(refs: UiRefs): void {
-  const COMPACT_RATIO = 0.92;
+  const COLLAPSE_DONE_PX = 4;
+  const SCROLL_THRESHOLD = 40;
   const TOGGLE_TRANSITION_MS = 220;
+
+  const toolbarPinStack = refs.toolbarPin.querySelector<HTMLElement>(".toolbar-pin-stack")!;
+  const toolbarPinInner = refs.toolbarPin.querySelector<HTMLElement>(".toolbar-pin-inner")!;
 
   const filtersHome = {
     parent: refs.toolbarFiltersWrap.parentElement!,
@@ -586,12 +592,15 @@ function setupScrollCollapse(refs: UiRefs): void {
   let lastScrollY = getScrollY();
   let manualOpen = false;
   let scrollRaf = 0;
+  let closeTransitionEnd: ((event: TransitionEvent) => void) | null = null;
 
-  const collapseProgress = () =>
-    filtersFullHeight > 0 ? collapsePx / filtersFullHeight : 0;
+  const isFiltersCollapsed = () =>
+    filtersFullHeight > 0 && collapsePx >= filtersFullHeight - COLLAPSE_DONE_PX;
 
-  const isCompact = () =>
-    collapseProgress() >= COMPACT_RATIO || (manualOpen && getScrollY() > 0);
+  const isCompact = () => {
+    const scrollY = getScrollY();
+    return (scrollY > 0 && isFiltersCollapsed()) || (manualOpen && scrollY > 0);
+  };
 
   const isOverlayActive = () =>
     refs.toolbarFiltersWrap.classList.contains("filters-overlay");
@@ -617,7 +626,7 @@ function setupScrollCollapse(refs: UiRefs): void {
       return;
     }
 
-    refs.toolbarPin.appendChild(refs.toolbarFiltersWrap);
+    toolbarPinStack.appendChild(refs.toolbarFiltersWrap);
     refs.toolbarFiltersWrap.classList.add("filters-overlay");
   };
 
@@ -634,20 +643,25 @@ function setupScrollCollapse(refs: UiRefs): void {
     refs.toolbar.classList.toggle("is-compact", compact);
     refs.toolbar.classList.toggle("filters-open", manualOpen);
 
-    const showToggle = compact && filtersFullHeight > 0;
-    refs.filtersToggle.hidden = !showToggle;
+    const showToggle =
+      filtersFullHeight > 0 &&
+      (manualOpen || getScrollY() > SCROLL_THRESHOLD);
+    refs.filtersToggle.classList.toggle("is-visible", showToggle);
     refs.filtersToggle.textContent = manualOpen ? "Hide" : "Filters";
+  };
+
+  const visibleFiltersHeightPx = (): number => {
+    if (isOverlayActive()) {
+      return manualOpen ? filtersFullHeight : 0;
+    }
+    if (manualOpen) {
+      return filtersFullHeight;
+    }
+    return Math.max(0, filtersFullHeight - collapsePx);
   };
 
   const applyFiltersHeight = (mode: "snap" | "open" | "close") => {
     syncPlacement();
-
-    const overlay = isOverlayActive();
-    const height = overlay
-      ? "auto"
-      : manualOpen
-        ? `${filtersFullHeight}px`
-        : `${Math.max(0, filtersFullHeight - collapsePx)}px`;
 
     if (mode === "open" || mode === "close") {
       refs.toolbarFiltersWrap.style.transition = `height ${TOGGLE_TRANSITION_MS}ms ease`;
@@ -658,14 +672,16 @@ function setupScrollCollapse(refs: UiRefs): void {
       refs.toolbarFiltersWrap.style.transition = "";
     }
 
-    refs.toolbarFiltersWrap.style.height = height;
+    refs.toolbarFiltersWrap.style.height = `${visibleFiltersHeightPx()}px`;
     syncChrome();
   };
 
   const measurePinSpacer = () => {
     const pinHeight = refs.toolbarPin.offsetHeight;
+    const searchHeight = toolbarPinInner.offsetHeight;
     refs.toolbarPinSpacer.style.height = `${pinHeight}px`;
     document.documentElement.style.setProperty("--toolbar-pin-height", `${pinHeight}px`);
+    document.documentElement.style.setProperty("--toolbar-search-height", `${searchHeight}px`);
   };
 
   const measureFilters = () => {
@@ -696,6 +712,10 @@ function setupScrollCollapse(refs: UiRefs): void {
     }
 
     if (scrollY <= 0) {
+      if (closeTransitionEnd) {
+        refs.toolbarFiltersWrap.removeEventListener("transitionend", closeTransitionEnd);
+        closeTransitionEnd = null;
+      }
       collapsePx = 0;
       manualOpen = false;
       applyFiltersHeight("snap");
@@ -703,7 +723,14 @@ function setupScrollCollapse(refs: UiRefs): void {
     }
 
     if (manualOpen && delta > 0) {
+      if (closeTransitionEnd) {
+        refs.toolbarFiltersWrap.removeEventListener("transitionend", closeTransitionEnd);
+        closeTransitionEnd = null;
+      }
       manualOpen = false;
+      collapsePx = filtersFullHeight;
+      applyFiltersHeight("snap");
+      return;
     }
 
     if (!manualOpen && delta !== 0) {
@@ -738,21 +765,53 @@ function setupScrollCollapse(refs: UiRefs): void {
 
   refs.filtersToggle.addEventListener("click", () => {
     if (manualOpen) {
-      manualOpen = false;
-      if (getScrollY() > 0) {
-        collapsePx = filtersFullHeight;
-      } else {
-        collapsePx = 0;
+      if (closeTransitionEnd) {
+        refs.toolbarFiltersWrap.removeEventListener("transitionend", closeTransitionEnd);
+        closeTransitionEnd = null;
       }
-      applyFiltersHeight("close");
+
+      refs.toolbarFiltersWrap.style.transition = `height ${TOGGLE_TRANSITION_MS}ms ease`;
+      refs.toolbarFiltersWrap.style.height = "0px";
+
+      closeTransitionEnd = (event: TransitionEvent) => {
+        if (event.propertyName !== "height") {
+          return;
+        }
+        refs.toolbarFiltersWrap.removeEventListener("transitionend", closeTransitionEnd!);
+        closeTransitionEnd = null;
+        refs.toolbarFiltersWrap.style.transition = "";
+
+        manualOpen = false;
+        collapsePx = getScrollY() > 0 ? filtersFullHeight : 0;
+        placeFiltersInFlow();
+        refs.toolbarFiltersWrap.style.height = `${Math.max(0, filtersFullHeight - collapsePx)}px`;
+        syncChrome();
+        measurePinSpacer();
+      };
+      refs.toolbarFiltersWrap.addEventListener("transitionend", closeTransitionEnd);
       return;
     }
 
     manualOpen = true;
     if (getScrollY() <= 0) {
       collapsePx = 0;
+      applyFiltersHeight("open");
+      return;
     }
-    applyFiltersHeight("open");
+
+    placeFiltersOverlay();
+    refs.toolbarFiltersWrap.style.transition = "";
+    refs.toolbarFiltersWrap.style.height = "0px";
+    syncChrome();
+    measurePinSpacer();
+    requestAnimationFrame(() => {
+      refs.toolbarFiltersWrap.style.transition = `height ${TOGGLE_TRANSITION_MS}ms ease`;
+      refs.toolbarFiltersWrap.style.height = `${filtersFullHeight}px`;
+      window.setTimeout(() => {
+        refs.toolbarFiltersWrap.style.transition = "";
+        measurePinSpacer();
+      }, TOGGLE_TRANSITION_MS + 30);
+    });
   });
 
   measureFilters();
@@ -1211,7 +1270,7 @@ async function init(): Promise<void> {
       return;
     }
 
-    if (event.key === "f" && !refs.filtersToggle.hidden) {
+    if (event.key === "f" && refs.filtersToggle.classList.contains("is-visible")) {
       event.preventDefault();
       refs.filtersToggle.click();
       return;
