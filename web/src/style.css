@@ -59,72 +59,76 @@ select {
 #app {
   max-width: 960px;
   margin: 0 auto;
-  padding: 1.25rem var(--page-gutter) 2rem;
+  padding: 0 var(--page-gutter) 2rem;
 }
 
 .toolbar {
   margin-bottom: 0.5rem;
 }
 
-.toolbar-sticky {
-  position: sticky;
+.toolbar-pin {
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 20;
   background: var(--bg);
+  pointer-events: none;
+  overflow: visible;
 }
 
-.toolbar.is-scrolled .toolbar-sticky {
-  border-bottom: 1px solid var(--border);
-}
-
-.toolbar-section {
-  padding: 0.75rem 0;
-}
-
-.toolbar-search {
+.toolbar-pin-inner {
+  pointer-events: auto;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0.75rem var(--page-gutter);
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
+.toolbar.is-compact .toolbar-pin {
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar-pin-spacer {
+  flex-shrink: 0;
+}
+
 .toolbar-filters-wrap {
   overflow: hidden;
-  max-height: 2400px;
-  opacity: 1;
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar.is-compact:not(.filters-open) .toolbar-filters-wrap:not(.filters-overlay) {
+  border-bottom: none;
+}
+
+.toolbar-filters-wrap.filters-overlay {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: calc(100dvh - var(--toolbar-pin-height, 3.25rem));
+  overscroll-behavior: contain;
+  border-bottom: 1px solid var(--border);
   background: var(--bg);
-  transition:
-    max-height 0.45s ease-in-out,
-    opacity 0.35s ease-in-out;
-}
-
-.toolbar:not(.is-scrolled) .toolbar-filters-wrap {
-  border-bottom: 1px solid var(--border);
-}
-
-.toolbar.is-scrolled:not(.filters-open) .toolbar-filters-wrap {
-  max-height: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.toolbar.is-scrolled.filters-open .toolbar-filters-wrap {
-  max-height: 2400px;
-  opacity: 1;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 10%, transparent);
   pointer-events: auto;
-  border-bottom: 1px solid var(--border);
 }
 
-.toolbar-filters-wrap > .toolbar-filters {
-  overflow: hidden;
+.toolbar-filters-wrap.filters-overlay .toolbar-filters {
+  max-width: 960px;
+  margin: 0 auto;
+  padding-inline: var(--page-gutter);
+  padding-top: 0.75rem;
 }
 
-.toolbar.is-scrolled:not(.filters-open) .toolbar-filters-wrap > .toolbar-filters,
-.toolbar.is-scrolled.filters-open .toolbar-filters-wrap > .toolbar-filters {
-  padding-top: 0;
-}
-
-.toolbar.is-scrolled:not(.filters-open) .toolbar-filters-wrap > .toolbar-filters {
-  padding-bottom: 0;
+.toolbar-filters {
+  padding-bottom: 0.75rem;
 }
 
 .filters-toggle {
@@ -533,6 +537,7 @@ kbd {
   flex-direction: column;
   gap: 0;
   background: var(--surface);
+  overflow-anchor: none;
 }
 
 .results-sentinel {
