@@ -141,7 +141,7 @@ After scraping (or whenever `data/` changes):
 uv run python scripts/build_search_index.py
 ```
 
-Writes `web/public/menu.json` from `data/all_items_flat.json` and `data/manifest.json`. Curated lunch picks in [`config/featured_items.json`](config/featured_items.json) are merged by stable Picnic item ID (`special` flag + default sort rank).
+Writes `web/public/menu.json` and `web/public/modifiers.json` from `data/all_items_flat.json` and `data/manifest.json`. Curated lunch picks in [`config/featured_items.json`](config/featured_items.json) are merged by stable Picnic item ID (`special` flag + default sort rank).
 
 ### LLM text export
 
@@ -179,22 +179,26 @@ Pushes to `main` run [`.github/workflows/deploy-pages.yml`](.github/workflows/de
 One-time repo setup:
 
 1. Settings → Pages → Build and deployment → Source: **GitHub Actions**
-2. Commit an up-to-date `web/public/menu.json` (run `build_search_index.py` locally after scraping)
+2. Commit up-to-date `web/public/menu.json` and `web/public/modifiers.json` (run `build_search_index.py` locally after scraping)
 
 The workflow sets `GH_PAGES_BASE` to `/<repo-name>/` so asset paths work on project pages (`https://<user>.github.io/<repo>/`).
 
 ### UI features
 
 - Instant fuzzy search prioritizing dish names over descriptions
+- Sticky search bar; filters collapse fluidly on scroll, with a **Filters** toggle when scrolled
 - Sort by relevance, price, name, or restaurant
 - Max price filter with $12 / $15 / $20 presets (rounded to nearest dollar)
-- Scrollable restaurant chip filter with select all / clear
-- Dietary chips (GF, vegan, vegetarian, spicy, etc.)
+- Searchable restaurant checklist (expand **Restaurants**, filter list, **Clear**)
+- Dietary chips (GF, vegan, vegetarian, spicy, dairy-free, halal)
 - Unavailable items hidden by default
+- Item photos, store logos, and links to Picnic item / restaurant pages
+- Modifier options on expandable rows (+ loads `modifiers.json` on demand)
+- Progressive results list (loads more as you scroll)
 - Light and dark mode via system preference
-- Shareable links via URL query params (`?q=bowl&maxPrice=15`)
+- Shareable URL state: `q`, `sort`, `maxPrice`, `stores`, `dietary`, `showUnavailable`
 
-Keyboard shortcuts: `/` focuses search, `Esc` clears the query.
+Keyboard shortcuts: `/` search, `j`/`k` or arrows navigate, `Enter`/`Space` expand item, `o` open on Picnic, `f` filters (when scrolled), `?` all shortcuts, `Esc` back out stepwise. See **Shortcuts** in the filter panel.
 
 ## Notes
 
