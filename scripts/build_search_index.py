@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 FEATURED_PATH = ROOT / "config" / "featured_items.json"
 OUTPUT_PATH = ROOT / "web" / "public" / "menu.json"
+MODIFIERS_OUTPUT_PATH = ROOT / "web" / "public" / "modifiers.json"
 
 DIETARY_RULES: tuple[tuple[str, str], ...] = (
     ("gluten-free", "gf"),
@@ -83,6 +84,204 @@ def build_item_url(
     )
 
 
+def item_price_value(item: dict | None) -> float:
+    if not item:
+        return 0.0
+    price = item.get("price")
+    return float(price) if price is not None else 0.0
+
+
+def lookup_item(
+    item_id: str,
+    items_by_id: dict[str, dict],
+    modifier_items_by_id: dict[str, dict],
+) -> dict | None:
+    return items_by_id.get(item_id) or modifier_items_by_id.get(item_id)
+
+
+def min_cost_for_group(
+    group: dict,
+    items_by_id: dict[str, dict],
+    modifier_items_by_id: dict[str, dict],
+    groups_by_id: dict[str, dict],
+    cache: dict[str, float],
+) -> float:
+    selection = group.get("selectionData") or {}
+    min_choices = int(selection.get("minimumNumberOfChoices") or 0)
+    if min_choices <= 0:
+        return 0.0
+
+    option_costs: list[float] = []
+    for item_id in group.get("itemIds") or []:
+        option_costs.append(
+            min_cost_for_item(
+                item_id,
+                items_by_id,
+                modifier_items_by_id,
+                groups_by_id,
+                cache,
+            )
+        )
+    if not option_costs:
+        return 0.0
+
+    option_costs.sort()
+    return sum(option_costs[:min_choices])
+
+
+def min_cost_for_item(
+    item_id: str,
+    items_by_id: dict[str, dict],
+    modifier_items_by_id: dict[str, dict],
+    groups_by_id: dict[str, dict],
+    cache: dict[str, float],
+) -> float:
+    if item_id in cache:
+        return cache[item_id]
+
+    item = lookup_item(item_id, items_by_id, modifier_items_by_id)
+    if not item:
+        cache[item_id] = 0.0
+        return 0.0
+
+    total = item_price_value(item)
+    for group_id in item.get("modifier_group_ids") or []:
+        group = groups_by_id.get(group_id)
+        if group:
+            total += min_cost_for_group(
+                group,
+                items_by_id,
+                modifier_items_by_id,
+                groups_by_id,
+                cache,
+            )
+
+    cache[item_id] = total
+    return total
+
+
+def build_modifier_groups(
+    group_ids: list[str],
+    items_by_id: dict[str, dict],
+    modifier_items_by_id: dict[str, dict],
+    groups_by_id: dict[str, dict],
+    *,
+    depth: int = 0,
+    max_depth: int = 4,
+) -> list[dict]:
+    groups: list[dict] = []
+    for group_id in group_ids:
+        group = groups_by_id.get(group_id)
+        if not group:
+            continue
+
+        selection = group.get("selectionData") or {}
+        min_choices = int(selection.get("minimumNumberOfChoices") or 0)
+        max_choices = int(selection.get("maximumNumberOfChoices") or 0)
+        options: list[dict] = []
+        for item_id in group.get("itemIds") or []:
+            option = lookup_item(item_id, items_by_id, modifier_items_by_id)
+            if not option:
+                continue
+            option_record: dict = {
+                "name": (option.get("name") or "").strip(),
+                "price": round(item_price_value(option), 2),
+            }
+            nested_group_ids = option.get("modifier_group_ids") or []
+            if depth < max_depth and nested_group_ids:
+                nested = build_modifier_groups(
+                    nested_group_ids,
+                    items_by_id,
+                    modifier_items_by_id,
+                    groups_by_id,
+                    depth=depth + 1,
+                    max_depth=max_depth,
+                )
+                if nested:
+                    option_record["nested"] = nested
+            options.append(option_record)
+
+        if options:
+            groups.append(
+                {
+                    "name": (group.get("name") or "").strip(),
+                    "minChoices": min_choices,
+                    "maxChoices": max_choices,
+                    "required": min_choices > 0,
+                    "options": options,
+                }
+            )
+    return groups
+
+
+def load_store_menu_context() -> dict[str, dict]:
+    menus_dir = DATA_DIR / "menus"
+    context: dict[str, dict] = {}
+    if not menus_dir.exists():
+        return context
+
+    for menu_path in menus_dir.glob("*.json"):
+        menu = json.loads(menu_path.read_text())
+        store_id = menu.get("store_id") or menu_path.stem
+        items_by_id = {
+            item["id"]: item
+            for item in menu.get("items") or []
+            if item.get("id")
+        }
+        modifier_items_by_id = menu.get("modifier_items") or {}
+        groups_by_id = {
+            group["id"]: group
+            for group in menu.get("modifier_groups") or []
+            if group.get("id")
+        }
+        context[store_id] = {
+            "items_by_id": items_by_id,
+            "modifier_items_by_id": modifier_items_by_id,
+            "groups_by_id": groups_by_id,
+        }
+    return context
+
+
+def enrich_item_pricing_and_modifiers(
+    raw: dict,
+    menu_context: dict[str, dict] | None,
+) -> tuple[float | None, list[dict] | None]:
+    store_id = raw.get("store_id")
+    item_id = raw.get("id")
+    if not store_id or not item_id or not menu_context:
+        return raw.get("price"), None
+
+    store_menu = menu_context.get(store_id)
+    if not store_menu:
+        return raw.get("price"), None
+
+    items_by_id = store_menu["items_by_id"]
+    modifier_items_by_id = store_menu["modifier_items_by_id"]
+    groups_by_id = store_menu["groups_by_id"]
+    item = items_by_id.get(item_id)
+    if not item:
+        return raw.get("price"), None
+
+    cache: dict[str, float] = {}
+    min_price = round(
+        min_cost_for_item(
+            item_id,
+            items_by_id,
+            modifier_items_by_id,
+            groups_by_id,
+            cache,
+        ),
+        2,
+    )
+    modifier_groups = build_modifier_groups(
+        item.get("modifier_group_ids") or [],
+        items_by_id,
+        modifier_items_by_id,
+        groups_by_id,
+    )
+    return min_price, modifier_groups or None
+
+
 def load_store_lookup() -> dict[str, dict]:
     manifest = json.loads((DATA_DIR / "manifest.json").read_text())
     lookup: dict[str, dict] = {}
@@ -113,35 +312,31 @@ def build_index() -> dict:
     items_raw = json.loads(flat_path.read_text())
     manifest = json.loads(manifest_path.read_text())
     stores_by_id = load_store_lookup()
+    menu_context = load_store_menu_context()
     featured_lookup = load_featured_lookup()
 
     items = []
+    modifiers: dict[str, list] = {}
     for raw in items_raw:
         store_id = raw.get("store_id")
         store = stores_by_id.get(store_id, {})
         store_name = store.get("name") or store_id or "Unknown"
         name = (raw.get("name") or "").strip()
         description = (raw.get("description") or "").strip()
-        search_text = " ".join(
-            part.lower()
-            for part in (name, description, store_name)
-            if part
-        )
-
         item_id = raw.get("id")
         special_rank = featured_lookup.get(item_id)
+        min_price, modifier_groups = enrich_item_pricing_and_modifiers(raw, menu_context)
         record = {
             "id": item_id,
             "name": name,
             "description": description,
-            "price": raw.get("price"),
+            "price": min_price,
             "storeId": store_id,
             "storeName": store_name,
             "storeLogo": store.get("logo_url"),
             "photoUrl": raw.get("photo_url"),
             "available": is_available(raw),
             "dietaryTags": parse_dietary_tags(name, description),
-            "searchText": search_text,
         }
         if special_rank is not None:
             record["special"] = True
@@ -162,6 +357,9 @@ def build_index() -> dict:
         )
         if item_url:
             record["itemUrl"] = item_url
+        if modifier_groups:
+            record["hasModifiers"] = True
+            modifiers[item_id] = modifier_groups
         items.append(record)
 
     stores = []
@@ -190,7 +388,7 @@ def build_index() -> dict:
     else:
         scraped_label = datetime.now(timezone.utc).strftime("%B %d, %Y")
 
-    return {
+    payload = {
         "meta": {
             "itemCount": len(items),
             "storeCount": len(stores),
@@ -201,12 +399,15 @@ def build_index() -> dict:
         "stores": stores,
         "items": items,
     }
+    return payload, modifiers
 
 
 def main() -> None:
-    payload = build_index()
+    payload, modifiers = build_index()
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(json.dumps(payload, separators=(",", ":")))
+    if modifiers:
+        MODIFIERS_OUTPUT_PATH.write_text(json.dumps(modifiers, separators=(",", ":")))
 
     featured_lookup = load_featured_lookup()
     if featured_lookup:
@@ -219,7 +420,10 @@ def main() -> None:
         for item_id in missing:
             print(f"  - missing featured id: {item_id}")
 
-    print(f"Wrote {OUTPUT_PATH} ({len(payload['items'])} items, {len(payload['stores'])} stores)")
+    modifier_note = f", {len(modifiers)} modifier sets" if modifiers else ""
+    print(
+        f"Wrote {OUTPUT_PATH} ({len(payload['items'])} items, {len(payload['stores'])} stores{modifier_note})",
+    )
 
 
 if __name__ == "__main__":

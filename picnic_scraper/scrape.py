@@ -41,6 +41,44 @@ def build_hubs_main_content_input(config: ScraperConfig) -> dict[str, Any]:
     return payload
 
 
+def collect_category_item_ids(categories: list[dict[str, Any]]) -> set[str]:
+    item_ids: set[str] = set()
+    for category in categories:
+        for item_id in category.get("itemIds") or []:
+            item_ids.add(item_id)
+    return item_ids
+
+
+def collect_modifier_item_ids(modifier_groups: list[dict[str, Any]]) -> set[str]:
+    item_ids: set[str] = set()
+    for group in modifier_groups:
+        for item_id in group.get("itemIds") or []:
+            item_ids.add(item_id)
+    return item_ids
+
+
+def filter_orderable_items(
+    items: list[dict[str, Any]],
+    categories: list[dict[str, Any]],
+    modifier_groups: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep category menu items; drop modifier-only options from the flat item map."""
+    category_item_ids = collect_category_item_ids(categories)
+    modifier_item_ids = collect_modifier_item_ids(modifier_groups)
+
+    filtered: list[dict[str, Any]] = []
+    for item in items:
+        item_id = item.get("id")
+        if not item_id:
+            continue
+        if item_id in category_item_ids:
+            filtered.append(item)
+        elif not category_item_ids and item_id not in modifier_item_ids:
+            # Some stores return items without category metadata.
+            filtered.append(item)
+    return filtered
+
+
 def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": item.get("id"),
@@ -61,6 +99,18 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_modifier_items(
+    items: list[dict[str, Any]],
+    modifier_groups: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    modifier_item_ids = collect_modifier_item_ids(modifier_groups)
+    return {
+        item["id"]: item
+        for item in items
+        if item.get("id") in modifier_item_ids
+    }
+
+
 def extract_menu_from_dqs_menu(menu: dict[str, Any]) -> dict[str, Any]:
     items = [
         normalize_item(item_entry.get("value") or {})
@@ -77,11 +127,14 @@ def extract_menu_from_dqs_menu(menu: dict[str, Any]) -> dict[str, Any]:
         for entry in menu.get("modifierGroups") or []
         if entry.get("value")
     ]
+    modifier_items = build_modifier_items(items, modifier_groups)
+    items = filter_orderable_items(items, categories, modifier_groups)
     items.sort(key=lambda row: (row.get("name") or "").lower())
     return {
         "menu_infos": menu.get("menuInfos") or [],
         "categories": categories,
         "modifier_groups": modifier_groups,
+        "modifier_items": modifier_items,
         "items": items,
     }
 
@@ -222,6 +275,99 @@ def group_items_by_store(items: list[dict[str, Any]]) -> dict[str, list[dict[str
     return grouped
 
 
+def enrich_saved_menus_with_modifier_items(output_dir: Path) -> int:
+    """Attach modifier option lookup tables to saved per-store menus."""
+    all_items_path = output_dir / "all_items.json"
+    menus_dir = output_dir / "menus"
+    if not all_items_path.exists() or not menus_dir.exists():
+        return 0
+
+    scraped = json.loads(all_items_path.read_text())
+    menus_by_store = {menu["store_id"]: menu for menu in scraped}
+    enriched = 0
+
+    for menu_path in menus_dir.glob("*.json"):
+        menu = json.loads(menu_path.read_text())
+        store_id = menu.get("store_id") or menu_path.stem
+        full_menu = menus_by_store.get(store_id)
+        if not full_menu:
+            continue
+        full_items = {
+            item["id"]: item
+            for item in full_menu.get("items") or []
+            if item.get("id")
+        }
+        menu["modifier_items"] = build_modifier_items(
+            list(full_items.values()),
+            menu.get("modifier_groups") or [],
+        )
+        menu_path.write_text(json.dumps(menu, indent=2))
+        enriched += 1
+
+    return enriched
+
+
+def refilter_saved_menus(output_dir: Path) -> dict[str, Any]:
+    """Re-apply orderable-item filtering to previously scraped menu files."""
+    menus_dir = output_dir / "menus"
+    manifest_path = output_dir / "manifest.json"
+    if not menus_dir.exists():
+        raise FileNotFoundError(f"Missing {menus_dir}")
+
+    all_items_by_id: dict[str, dict[str, Any]] = {}
+    item_counts: dict[str, int] = {}
+    menus_by_store: dict[str, dict[str, Any]] = {}
+    all_items_path = output_dir / "all_items.json"
+    if all_items_path.exists():
+        menus_by_store = {
+            menu["store_id"]: menu
+            for menu in json.loads(all_items_path.read_text())
+        }
+
+    for menu_path in sorted(menus_dir.glob("*.json")):
+        menu = json.loads(menu_path.read_text())
+        store_id = menu.get("store_id") or menu_path.stem
+        categories = menu.get("categories") or []
+        modifier_groups = menu.get("modifier_groups") or []
+        items = menu.get("items") or []
+        filtered_items = filter_orderable_items(items, categories, modifier_groups)
+        menu["items"] = filtered_items
+        if full_menu := menus_by_store.get(store_id):
+            full_items = {
+                item["id"]: item
+                for item in full_menu.get("items") or []
+                if item.get("id")
+            }
+            menu["modifier_items"] = build_modifier_items(
+                list(full_items.values()),
+                modifier_groups,
+            )
+        menu_path.write_text(json.dumps(menu, indent=2))
+        item_counts[store_id] = len(filtered_items)
+        for item in filtered_items:
+            item_id = item.get("id")
+            if item_id:
+                all_items_by_id[item_id] = item
+
+    all_items = list(all_items_by_id.values())
+    manifest = {}
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+    manifest["total_items"] = len(all_items)
+    for store in manifest.get("stores") or []:
+        store["item_count"] = item_counts.get(store["store_id"], 0)
+
+    with (output_dir / "all_items_flat.json").open("w") as handle:
+        json.dump(all_items, handle, indent=2)
+    with manifest_path.open("w") as handle:
+        json.dump(manifest, handle, indent=2)
+
+    return {
+        "item_count": len(all_items),
+        "store_count": len(item_counts),
+    }
+
+
 def scrape_all_menus(
     config: ScraperConfig,
     output_dir: Path,
@@ -272,6 +418,7 @@ def scrape_all_menus(
                 "menu_infos": menu_data.get("menu_infos") or [],
                 "categories": menu_data.get("categories") or [],
                 "modifier_groups": menu_data.get("modifier_groups") or [],
+                "modifier_items": menu_data.get("modifier_items") or {},
                 "featured_items": featured_items,
                 "items": items,
                 "source": "storeContent",

@@ -7,6 +7,20 @@ export type SortMode =
 
 export type DietaryTag = "gf" | "vegan" | "vegetarian" | "dairy-free" | "halal" | "spicy" | "keto";
 
+export interface ModifierGroup {
+  name: string;
+  minChoices: number;
+  maxChoices: number;
+  required: boolean;
+  options: ModifierOption[];
+}
+
+export interface ModifierOption {
+  name: string;
+  price: number;
+  nested?: ModifierGroup[];
+}
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -20,9 +34,9 @@ export interface MenuItem {
   photoUrl: string | null;
   available: boolean;
   dietaryTags: DietaryTag[];
-  searchText: string;
   special?: boolean;
   specialRank?: number;
+  hasModifiers?: boolean;
 }
 
 export interface StoreInfo {
@@ -42,6 +56,7 @@ export interface MenuData {
   };
   stores: StoreInfo[];
   items: MenuItem[];
+  modifiers?: Record<string, ModifierGroup[]>;
 }
 
 export interface FilterState {

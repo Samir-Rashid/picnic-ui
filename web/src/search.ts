@@ -1,31 +1,29 @@
 import MiniSearch from "minisearch";
-import type { FilterState, MenuData, MenuItem, ScoredItem, SortMode } from "./types";
+import type { FilterState, MenuItem, ScoredItem, SortMode } from "./types";
 
-export function createSearchIndex(items: MenuItem[]): MiniSearch<MenuItem> {
-  const index = new MiniSearch<MenuItem>({
+interface SearchDocument {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export function createSearchIndex(items: MenuItem[]): MiniSearch<SearchDocument> {
+  const index = new MiniSearch<SearchDocument>({
     fields: ["name", "description"],
-    storeFields: [
-      "id",
-      "name",
-      "description",
-      "price",
-      "storeId",
-      "storeName",
-      "storeLogo",
-      "photoUrl",
-      "available",
-      "dietaryTags",
-      "searchText",
-      "special",
-      "specialRank",
-    ],
+    storeFields: ["id"],
     searchOptions: {
       boost: { name: 4, description: 1 },
       fuzzy: 0.15,
       prefix: true,
     },
   });
-  index.addAll(items);
+  index.addAll(
+    items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+    })),
+  );
   return index;
 }
 
@@ -96,8 +94,9 @@ function compareItems(a: MenuItem, b: MenuItem, sort: SortMode): number {
 }
 
 export function searchItems(
-  data: MenuData,
-  index: MiniSearch<MenuItem>,
+  itemsById: Map<string, MenuItem>,
+  allItems: MenuItem[],
+  index: MiniSearch<SearchDocument>,
   state: FilterState,
 ): ScoredItem[] {
   const query = state.query.trim();
@@ -108,7 +107,10 @@ export function searchItems(
     const hits = index.search(query);
     results = hits
       .map((hit) => {
-        const item = hit as unknown as MenuItem;
+        const item = itemsById.get(hit.id);
+        if (!item) {
+          return null;
+        }
         const boost = nameMatchBoost(item, query);
         return {
           item,
@@ -116,6 +118,7 @@ export function searchItems(
           boost,
         };
       })
+      .filter((entry): entry is { item: MenuItem; score: number; boost: number } => entry !== null)
       .filter(({ item, score, boost }) => {
         if (!passesFilters(item, state)) {
           return false;
@@ -130,7 +133,7 @@ export function searchItems(
       })
       .map(({ item, score }) => ({ item, score }));
   } else {
-    results = data.items
+    results = allItems
       .filter((item) => passesFilters(item, state))
       .map((item) => ({ item, score: 0 }));
   }
